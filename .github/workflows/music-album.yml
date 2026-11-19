@@ -100,7 +100,7 @@ jobs:
         working-directory: music
         run: |
           N="out/vol$(printf %02d $VOL)"
-          TITLE="밤, 혼자 LP로 듣는 80~90년대 피아노 발라드 | Vol.${VOL} ${{ github.event.inputs.title_extra }}"
+          TITLE="밤, 혼자 LP로 듣는 80~90년대 피아노 발라드 | Vol.${VOL} | B-Side Night ${{ github.event.inputs.title_extra }}"
           python upload.py --video "$N.mp4" --thumb "${N}_thumb.jpg" --title "$TITLE" --desc "${N}_description.txt" --publish-at "${{ github.event.inputs.publish_at }}"
       - name: 결과 보관 (7일)
         uses: actions/upload-artifact@v4

@@ -59,7 +59,7 @@ def make_record(size):
     for ang in (35, 215): sd.pieslice([0, 0, S - 1, S - 1], ang - 9, ang + 9, fill=(255, 255, 255, 34))
     rec = Image.alpha_composite(rec, sh.filter(ImageFilter.GaussianBlur(10))); d = ImageDraw.Draw(rec); lr = int(S * .17)
     d.ellipse([S / 2 - lr, S / 2 - lr, S / 2 + lr, S / 2 + lr], fill=(196, 74, 56, 255)); f = F(S * .028)
-    d.text((S / 2, S / 2 - S * .06), "NIGHT PIANO", font=f, fill=(250, 226, 190), anchor="mm"); d.text((S / 2, S / 2 + S * .075), "SIDE A · 33 RPM", font=f, fill=(250, 226, 190), anchor="mm")
+    d.text((S / 2, S / 2 - S * .06), "B-SIDE NIGHT", font=f, fill=(250, 226, 190), anchor="mm"); d.text((S / 2, S / 2 + S * .075), "SIDE B · 33 RPM", font=f, fill=(250, 226, 190), anchor="mm")
     d.ellipse([S / 2 - 7, S / 2 - 7, S / 2 + 7, S / 2 + 7], fill=(14, 14, 16, 255)); return rec.resize((size, size), Image.LANCZOS)
 
 def draw_record(fr, rec, size, cx, cy, tl):
@@ -73,7 +73,7 @@ def draw_cassette(fr, cx, cy, tl, prog, title):
     d.rounded_rectangle([x0 + 8, y0 + 14, x0 + w + 8, y0 + h + 14], 18, fill=(0, 0, 0, 110))
     d.rounded_rectangle([x0, y0, x0 + w, y0 + h], 18, fill=(60, 56, 54, 255), outline=(20, 18, 18, 255), width=3)
     d.rounded_rectangle([x0 + 28, y0 + 22, x0 + w - 28, y0 + 140], 10, fill=(232, 214, 176, 255)); d.rectangle([x0 + 28, y0 + 22, x0 + w - 28, y0 + 50], fill=(196, 74, 56, 255))
-    d.text((cx, y0 + 38), "SIDE A", font=F(18), fill=(250, 230, 200), anchor="mm"); d.text((cx, y0 + 96), title, font=F(24), fill=(60, 40, 30), anchor="mm")
+    d.text((cx, y0 + 38), "SIDE B", font=F(18), fill=(250, 230, 200), anchor="mm"); d.text((cx, y0 + 96), title, font=F(24), fill=(60, 40, 30), anchor="mm")
     d.rounded_rectangle([x0 + 70, y0 + 165, x0 + w - 70, y0 + 255], 40, fill=(26, 24, 24, 255))
     for side, frac in ((-1, 1 - prog), (1, prog)):         # 테이프가 감기며 왼쪽 릴은 줄고 오른쪽 릴은 커짐
         rx = cx + side * 105; ry = y0 + 210; r = 20 + 22 * frac
