@@ -27,7 +27,8 @@ def background(seed):
 
 def load_bg(path):
     """AI 배경 이미지를 1280x720으로 맞추고 어둡고 따뜻하게, 가장자리를 어둡게 (비주얼과 글자가 잘 보이도록)"""
-    im = Image.open(path).convert("RGB"); w, h = im.size; r = max(W / w, H / h); im = im.resize((int(w * r) + 1, int(h * r) + 1), Image.LANCZOS)
+    im = Image.open(path).convert("RGB").filter(ImageFilter.GaussianBlur(3)); w, h = im.size   # 약한 블러: 혹시 생긴 글자를 읽을 수 없게 + 아날로그 느낌
+    r = max(W / w, H / h); im = im.resize((int(w * r) + 1, int(h * r) + 1), Image.LANCZOS)
     ox, oy = (im.width - W) // 2, (im.height - H) // 2; a = np.asarray(im.crop((ox, oy, ox + W, oy + H))).astype("float32") * .62
     a *= np.array([1.04, 1.0, .93]); yy, xx = np.ogrid[:H, :W]
     return a * np.clip(1 - .6 * (((xx - W / 2) / (W / 1.2)) ** 2 + ((yy - H / 2) / (H / 1.1)) ** 2), .3, 1)[..., None]
@@ -121,7 +122,7 @@ class Scene:
         right = self.corner == "br"; wx = W - MARGIN - wd.width if right else MARGIN; wy = H - MARGIN - wd.height
         d = ImageDraw.Draw(fr, "RGBA")       # 제목은 좌상단에 작게 (우하단은 유튜브 워터마크 자리)
         sh = Image.new("RGBA", wd.size, (0, 0, 0, 0)); fr.alpha_composite(wd, (int(wx), int(wy)))
-        d.text((MARGIN, MARGIN + 14), "지금 재생 중", font=F(14), fill=(230, 200, 160, 170), anchor="ls"); d.text((MARGIN, MARGIN + 46), self.title, font=F(24), fill=(250, 236, 214, 235), anchor="ls")
+        d.text((MARGIN, MARGIN + 30), self.title, font=F(26), fill=(250, 236, 214, 235), anchor="ls")
         return fr
 
 def load_audio(path, sr=16000):

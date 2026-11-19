@@ -18,7 +18,6 @@ def make(tracks_path, vol, minutes, out, line1, line2):
         y = 250 + k * 130
         for dx, dy in ((3, 3), (2, 2)): d.text((70 + dx, y + dy), txt, font=V.F(sz), fill=(0, 0, 0, 170), anchor="ls")
         d.text((70, y), txt, font=V.F(sz), fill=col, anchor="ls")
-    d.text((70, 560), "카세트·LP 질감 · 가사 없는 피아노 연주곡", font=V.F(28), fill=(235, 215, 185, 210), anchor="ls")
     im.convert("RGB").save(out, quality=90); print("썸네일:", out)
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--vol", type=int, default=1); ap.add_argument("--minutes", type=float, default=60); ap.add_argument("--out", required=True)

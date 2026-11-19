@@ -7,7 +7,7 @@ python make_album.py --minutes 60 --out out/vol01 --seed 1 [--texture lp|tape|no
 import argparse, json, os, random, shutil, subprocess, tempfile
 import numpy as np, soundfile as sf
 import retro as R
-import lp as LP, tape as TP
+import lp as LP, tape as TP, scenes as SC
 SR = 48000
 PROGS = {
     "ballad90": [R.b90, [(0, "M7"), (9, "m7"), (2, "m7"), (7, "7"), (5, "M7"), (4, "m7"), (2, "m7"), (7, "sus")],
@@ -36,14 +36,14 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True); tmp = tempfile.mkdtemp(prefix="album_"); cwd = os.getcwd(); os.chdir(tmp)
     X = int(a.xfade * SR); tracks = []; tail = None; pos = 0.0; last_mood = None; last_key = None
     outwav = os.path.join(cwd, a.out + ".wav"); w = sf.SoundFile(outwav, "w", SR, 2, subtype="PCM_16")
-    names = titles(200, rnd); i = 0
+    used_scenes = {}; i = 0
     while pos < a.minutes * 60:
         i += 1
         mood = rnd.choice([m for m in moods if m != last_mood] or moods); last_mood = mood
         key = rnd.choice([k for k in KEYS if k != last_key]); last_key = key
         prog = rnd.choice(PROGS[mood]); bpm = rnd.randint(*BPM[mood]); seed = rnd.randint(1, 10 ** 6)
         pad = round(rnd.uniform(.08, .14), 2) if rnd.random() < a.pad else 0.0; lh = rnd.choice(["arp", "block"]) if mood != "citypop80" else "arp"
-        nm = f"t{i:02d}"
+        nm = f"t{i:02d}"; bg_prompt, title = SC.pick(mood, rnd, used_scenes)   # 장면과 제목을 함께 정함
         R.comp(nm, key, mood in MINOR, prog, bpm, seed, pad_vol=pad, lh=lh, swing=1 if mood == "citypop80" else 0)
         tex(f"{nm}.wav", f"{nm}_x.wav", a.texture, seed)
         d, _ = sf.read(f"{nm}_x.wav", dtype="float32"); d = d / max(1e-6, np.sqrt((d ** 2).mean())) * .12   # 곡마다 비슷한 음량
@@ -61,7 +61,7 @@ def main():
             w.write(np.clip(body[:-X], -1, 1)); tail = body[-X:]
         else:
             tail = body
-        tracks.append(dict(i=i, title=names[i - 1], start=round(start, 2), dur=round(len(d) / SR, 2), midi=f"{os.path.basename(a.out)}_midi/{nm}.mid", mood=mood, key=key, bpm=bpm, pad=pad > 0, lh=lh))
+        tracks.append(dict(i=i, title=title, bg_prompt=bg_prompt, start=round(start, 2), dur=round(len(d) / SR, 2), midi=f"{os.path.basename(a.out)}_midi/{nm}.mid", mood=mood, key=key, bpm=bpm, pad=pad > 0, lh=lh))
         pos = start + len(d) / SR
     if tail is not None:
         w.write(np.clip(tail, -1, 1))
