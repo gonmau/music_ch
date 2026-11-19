@@ -66,6 +66,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      - name: ffmpeg 설치
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - run: pip install -r requirements.txt
       - name: 피아노 샘플 (Salamander Grand Piano, CC BY 3.0)
         uses: actions/cache@v4
