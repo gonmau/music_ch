@@ -85,26 +85,36 @@ def spectrum_bars(audio, sr, t, prev, nb=56):
     out = np.log1p(out * 5) / 4.5; out = np.clip(out, 0, 1); return np.maximum(out, prev * .86)
 
 def draw_spectrum(fr, bars):
-    d = ImageDraw.Draw(fr, "RGBA"); n = len(bars); x0, x1, yb = 130, W - 130, H - 120; bw = (x1 - x0) / n
+    d = ImageDraw.Draw(fr, "RGBA"); n = len(bars); cw, ch = fr.size; x0, x1, yb = 10, cw - 10, ch - 90; bw = (x1 - x0) / n
     for k, v in enumerate(bars):
-        h = 8 + v * 190; x = x0 + k * bw; d.rounded_rectangle([x + 2, yb - h, x + bw - 2, yb], 3, fill=AMBER + (int(120 + 110 * v),))
+        h = 8 + v * 270; x = x0 + k * bw; d.rounded_rectangle([x + 2, yb - h, x + bw - 2, yb], 3, fill=AMBER + (int(120 + 110 * v),))
         d.rounded_rectangle([x + 2, yb + 6, x + bw - 2, yb + 6 + h * .22], 3, fill=AMBER + (40,))      # 바닥 반사
 
+CW, CH, WS = 800, 460, 2          # 위젯 캔버스(2배 크기로 그린 뒤 줄여 선명하게) -> 실제 400x230
+MARGIN = 48
+
 class Scene:
-    def __init__(self, style, notes, title, seed, dur):
-        self.style, self.notes, self.title, self.dur = style, notes, title, dur
-        self.bg = background(seed); self.pos = keyboard_layout(); self.rec = make_record(360 if style == "lp" else 250) if style in ("lp", "both") else None; self.bars = np.zeros(56)
+    def __init__(self, style, notes, title, seed, dur, corner="br"):
+        self.style, self.notes, self.title, self.dur, self.corner = style, notes, title, dur, corner
+        self.bg = background(seed); self.pos = keyboard_layout(36, 96, 0, CW); self.bars = np.zeros(56)
+        self.rec = make_record(400 if style == "lp" else 280) if style in ("lp", "both") else None
+    def widget(self, tl, audio, sr, t_abs):
+        w = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); s = self.style; R = self.corner == "br"      # 모서리 쪽으로 붙여 정렬
+        if s == "keys": draw_keys(w, self.pos, 170, tl, self.notes, CH - 200)
+        elif s == "lp": draw_record(w, self.rec, 400, CW - 250 if R else 250, CH * .5, tl)
+        elif s == "both": draw_record(w, self.rec, 280, CW - 190 if R else 190, CH * .32, tl); draw_keys(w, self.pos, 110, tl, self.notes, CH - 140)
+        elif s == "cassette": draw_cassette(w, CW - 255 if R else 255, CH / 2, tl, min(1, tl / max(1, self.dur)), self.title)
+        elif s == "spectrum": self.bars = spectrum_bars(audio, sr, t_abs, self.bars); draw_spectrum(w, self.bars)
+        return w.resize((CW // WS, CH // WS), Image.LANCZOS)
     def frame(self, tl, grain, audio=None, sr=16000, t_abs=0):
         z = 1 + .03 * min(1, tl / max(1, self.dur)); a = self.bg
         if z > 1:
             im = Image.fromarray(a.astype("uint8")).resize((int(W * z), int(H * z)), Image.BILINEAR); ox, oy = int(W * (z - 1) / 2), int(H * (z - 1) / 2); a = np.asarray(im.crop((ox, oy, ox + W, oy + H))).astype("float32")
-        fr = Image.fromarray(np.clip(a + grain, 0, 255).astype("uint8")).convert("RGBA"); d = ImageDraw.Draw(fr, "RGBA"); s = self.style
-        d.text((90, 90 if s in ("keys", "spectrum", "cassette") else 120), "지금 재생 중", font=F(20), fill=(230, 200, 160, 190)); d.text((90, 124 if s in ("keys", "spectrum", "cassette") else 154), self.title, font=F(34), fill=(250, 236, 214, 255))
-        if s == "keys": draw_keys(fr, self.pos, 130, tl, self.notes, H - 210)
-        elif s == "lp": draw_record(fr, self.rec, 360, W * .68, H * .42, tl)
-        elif s == "both": draw_record(fr, self.rec, 250, W * .70, H * .36, tl); draw_keys(fr, self.pos, 80, tl, self.notes, H - 150)
-        elif s == "cassette": draw_cassette(fr, W * .66, H * .42, tl, min(1, tl / max(1, self.dur)), self.title)
-        elif s == "spectrum": self.bars = spectrum_bars(audio, sr, t_abs, self.bars); draw_spectrum(fr, self.bars)
+        fr = Image.fromarray(np.clip(a + grain, 0, 255).astype("uint8")).convert("RGBA"); wd = self.widget(tl, audio, sr, t_abs)
+        right = self.corner == "br"; wx = W - MARGIN - wd.width if right else MARGIN; wy = H - MARGIN - wd.height
+        d = ImageDraw.Draw(fr, "RGBA"); tx = MARGIN if right else W - MARGIN; anc = "ls" if right else "rs"       # 제목은 반대쪽 아래 모서리에 작게
+        sh = Image.new("RGBA", wd.size, (0, 0, 0, 0)); fr.alpha_composite(wd, (int(wx), int(wy)))
+        d.text((tx, H - MARGIN - 34), "지금 재생 중", font=F(14), fill=(230, 200, 160, 170), anchor=anc); d.text((tx, H - MARGIN), self.title, font=F(24), fill=(250, 236, 214, 235), anchor=anc)
         return fr
 
 def load_audio(path, sr=16000):
@@ -122,12 +132,13 @@ def encoder(audio, out, start=None, dur=None, w=W, h=H):
 def grains(): 
     rnd = np.random.RandomState(1); return [rnd.randn(H // 2, W // 2, 1).repeat(2, 0).repeat(2, 1).astype("float32") * 2.2 for _ in range(6)]
 
-def render_album(audio, tracks, out, seed=1, styles=None, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5):
+def render_album(audio, tracks, out, seed=1, styles=None, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, corners="br"):
     styles = styles or STYLES; rnd = random.Random(seed); sr = 16000; a16 = load_audio(audio, sr); gr = grains(); last = None; scenes = []
     for t in tracks:
         st = rnd.choice([s for s in styles if s != last] or styles); last = st; t["style"] = st
         mid = os.path.join(base_dir, t["midi"]); notes = [n for i in pm.PrettyMIDI(mid).instruments for n in i.notes]
-        scenes.append((t["start"], Scene(st, notes, t["title"], seed * 100 + t["i"], t["dur"]), t["start"] + t["dur"]))
+        corner = corners if corners in ("br", "bl") else rnd.choice(["br", "bl"]); t["corner"] = corner
+        scenes.append((t["start"], Scene(st, notes, t["title"], seed * 100 + t["i"], t["dur"], corner), t["start"] + t["dur"]))
     total = len(a16) / sr; p = encoder(audio, out, w=w, h=h); bounds = [tracks[i + 1]["start"] + xfade / 2 for i in range(len(tracks) - 1)] + [1e9]
     for k in range(int(total * FPS)):
         T = k / FPS; g = gr[k % 6]
@@ -148,11 +159,11 @@ def render_preview(style, midi, audio, start, dur, title, out):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("mode", choices=["album", "preview"]); ap.add_argument("--audio", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H)
+    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="br", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H)
     ap.add_argument("--style", default="keys", choices=STYLES); ap.add_argument("--midi", default=""); ap.add_argument("--start", type=float, default=0); ap.add_argument("--dur", type=float, default=20); ap.add_argument("--title", default="밤 열한 시의 피아노")
     a = ap.parse_args()
     if a.mode == "album":
-        tr = json.load(open(a.tracks, encoding="utf-8")); render_album(a.audio, tr, a.out, a.seed, a.styles.split(","), os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h)
+        tr = json.load(open(a.tracks, encoding="utf-8")); render_album(a.audio, tr, a.out, a.seed, a.styles.split(","), os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, corners=a.corner)
         json.dump(tr, open(a.out + ".styles.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     else:
         render_preview(a.style, a.midi, a.audio, a.start, a.dur, a.title, a.out)
