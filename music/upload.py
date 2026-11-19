@@ -12,9 +12,12 @@ def youtube():
     c = Credentials(None, refresh_token=os.environ["YT_REFRESH_TOKEN"], token_uri="https://oauth2.googleapis.com/token", client_id=os.environ["YT_CLIENT_ID"], client_secret=os.environ["YT_CLIENT_SECRET"])
     return build("youtube", "v3", credentials=c)
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--video", required=True); ap.add_argument("--thumb", default=""); ap.add_argument("--title", required=True); ap.add_argument("--desc", required=True); ap.add_argument("--publish-at", default=""); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--video", required=True); ap.add_argument("--thumb", default=""); ap.add_argument("--title", default=""); ap.add_argument("--meta", default=""); ap.add_argument("--desc", required=True); ap.add_argument("--publish-at", default=""); a = ap.parse_args()
+    import json
+    meta = json.load(open(a.meta, encoding="utf-8")) if a.meta and os.path.exists(a.meta) else {}
+    title = (a.title or meta.get("title") or "B-Side Night"); tags = meta.get("tags") or TAGS
     desc = open(a.desc, encoding="utf-8").read(); yt = youtube()
-    body = {"snippet": {"title": a.title[:100], "description": desc[:4900], "categoryId": "10", "tags": TAGS},
+    body = {"snippet": {"title": title[:100], "description": desc[:4900], "categoryId": "10", "tags": tags},
             "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": True}}
     if a.publish_at.strip():
         kst = datetime.strptime(a.publish_at.strip(), "%Y-%m-%d %H:%M").replace(tzinfo=timezone(timedelta(hours=9))); body["status"]["publishAt"] = kst.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")

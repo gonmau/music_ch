@@ -12,7 +12,7 @@ on:
         description: "영상 길이(분)"
         default: "60"
       moods:
-        description: "곡 분위기 (쉼표): ballad90,minor80,citypop80"
+        description: "곡 분위기 (쉼표): ballad90, minor80, citypop80, newage"
         default: "ballad90,minor80,citypop80"
       texture:
         description: "질감"
@@ -80,7 +80,7 @@ jobs:
         working-directory: music
         run: |
           mkdir -p out
-          python make_album.py --minutes "${{ github.event.inputs.minutes }}" --out "out/vol$(printf %02d $VOL)" --seed "$VOL" \
+          python make_album.py --minutes "${{ github.event.inputs.minutes }}" --out "out/vol$(printf %02d $VOL)" --seed "$VOL" --vol "$VOL" \
             --texture "${{ github.event.inputs.texture }}" --moods "${{ github.event.inputs.moods }}"
       - name: AI 배경 이미지
         if: ${{ github.event.inputs.ai_bg == 'true' }}
@@ -102,8 +102,7 @@ jobs:
         working-directory: music
         run: |
           N="out/vol$(printf %02d $VOL)"
-          TITLE="밤, 혼자 LP로 듣는 80~90년대 피아노 발라드 | Vol.${VOL} | B-Side Night ${{ github.event.inputs.title_extra }}"
-          python upload.py --video "$N.mp4" --thumb "${N}_thumb.jpg" --title "$TITLE" --desc "${N}_description.txt" --publish-at "${{ github.event.inputs.publish_at }}"
+          python upload.py --video "$N.mp4" --thumb "${N}_thumb.jpg" --meta "${N}_meta.json" --desc "${N}_description.txt" --publish-at "${{ github.event.inputs.publish_at }}"
       - name: 결과 보관 (7일)
         uses: actions/upload-artifact@v4
         with:
@@ -113,6 +112,7 @@ jobs:
             music/out/vol*_thumb.jpg
             music/out/vol*_description.txt
             music/out/vol*_tracks.json
+            music/out/vol*_meta.json
           retention-days: 7
       - name: 디스코드 알림
         if: ${{ always() && env.DISCORD_WEBHOOK_URL != '' }}

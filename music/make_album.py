@@ -14,9 +14,16 @@ PROGS = {
                  [(0, "add9"), (7, "sus"), (9, "m7"), (4, "m7"), (5, "M7"), (0, "M7"), (2, "m7"), (7, "7")]],
     "minor80": [R.m80, [(0, "m7"), (8, "M7"), (3, "M7"), (10, "7"), (0, "m7"), (5, "M7"), (7, "7"), (0, "m")]],
     "citypop80": [R.c80, [(2, "m7"), (7, "7"), (0, "M7"), (4, "m7"), (9, "m7"), (2, "m7"), (7, "7"), (0, "M7")]],
+    "newage": [[(0, "add9"), (5, "M7"), (9, "m7"), (7, "sus"), (0, "add9"), (5, "M7"), (2, "m7"), (7, "sus")],
+               [(0, "M7"), (4, "m7"), (9, "m7"), (5, "M7"), (0, "add9"), (7, "sus"), (5, "M7"), (7, "sus")]],
 }
+ENERGY = {"ballad90": 0, "minor80": -4, "citypop80": 10, "newage": -8}      # 곡 순서(잔잔한 곡부터)를 정하는 기준: bpm + 분위기 보정
+INTRO = {"ballad90": "90년대 라디오에서 흘러나오던 서정 발라드 감성", "minor80": "80년대 단조 발라드 특유의 쓸쓸하고 깊은 여운", "citypop80": "80년대 시티팝의 도시적이고 가벼운 스윙감", "newage": "맑고 잔잔하게 흐르는 서정 피아노"}
+HEAD = {"ballad90": ("밤, 혼자 듣는", "90년대 피아노 발라드"), "minor80": ("비 오는 밤에 듣는", "80년대 피아노 발라드"), "citypop80": ("퇴근길 드라이브", "80년대 시티팝 피아노"), "newage": ("고요한 밤의", "서정 피아노 연주곡")}
+MIXED = ("밤, 혼자 듣는", "80~90년대 피아노 발라드")
+TAGS = ["80년대", "90년대", "추억의 발라드", "피아노 발라드", "피아노 연주곡", "레트로", "올드팝", "LP", "카세트", "노스탤지어", "80s", "90s", "piano ballad", "retro", "instrumental"]
 MINOR = {"minor80"}
-BPM = {"ballad90": (60, 72), "minor80": (58, 68), "citypop80": (72, 82)}
+BPM = {"ballad90": (60, 72), "minor80": (58, 68), "citypop80": (72, 82), "newage": (52, 62)}
 KEYS = [55, 57, 58, 60, 62, 64, 65]     # 낮은 옥타브 기준 근음(Retro가 66 이상은 한 옥타브 내림)
 A = ["밤 열한 시의", "비 그친 뒤의", "마지막 버스의", "불 꺼진 창가의", "오래된 편지의", "골목 끝의", "새벽 두 시의", "빈 방의", "여름밤의", "식어 가는 커피의",
      "멈춘 시계의", "젖은 거리의", "닫힌 가게의", "희미한 가로등의", "돌아오지 않는", "잊고 있던", "서랍 속의", "늦은 퇴근길의", "텅 빈 극장의", "겨울 저녁의"]
@@ -30,19 +37,27 @@ def tex(inp, out, kind, seed):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--minutes", type=float, default=60); ap.add_argument("--out", default="out/album"); ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--texture", default="lp", choices=["lp", "tape", "none"]); ap.add_argument("--moods", default="ballad90,minor80,citypop80")
+    ap.add_argument("--texture", default="lp", choices=["lp", "tape", "none"]); ap.add_argument("--moods", default="ballad90,minor80,citypop80"); ap.add_argument("--vol", type=int, default=1)
     ap.add_argument("--pad", type=float, default=.5, help="곡에 약한 패드를 얹을 확률 (0~1)"); ap.add_argument("--xfade", type=float, default=6.0)
     a = ap.parse_args(); rnd = random.Random(a.seed); moods = a.moods.split(",")
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True); tmp = tempfile.mkdtemp(prefix="album_"); cwd = os.getcwd(); os.chdir(tmp)
     X = int(a.xfade * SR); tracks = []; tail = None; pos = 0.0; last_mood = None; last_key = None
     outwav = os.path.join(cwd, a.out + ".wav"); w = sf.SoundFile(outwav, "w", SR, 2, subtype="PCM_16")
-    used_scenes = {}; i = 0
-    while pos < a.minutes * 60:
-        i += 1
+    used_scenes = {}; i = 0; plan = []
+    for _ in range(int(a.minutes * 60 / 140) + 4):                      # 먼저 곡 구성을 정하고, 잔잔한 곡이 앞에 오도록 순서를 잡는다
         mood = rnd.choice([m for m in moods if m != last_mood] or moods); last_mood = mood
         key = rnd.choice([k for k in KEYS if k != last_key]); last_key = key
-        prog = rnd.choice(PROGS[mood]); bpm = rnd.randint(*BPM[mood]); seed = rnd.randint(1, 10 ** 6)
-        pad = round(rnd.uniform(.08, .14), 2) if rnd.random() < a.pad else 0.0; lh = rnd.choice(["arp", "block"]) if mood != "citypop80" else "arp"
+        pad = round(rnd.uniform(.08, .14), 2) if rnd.random() < a.pad else 0.0; bpm = rnd.randint(*BPM[mood])
+        plan.append(dict(mood=mood, key=key, prog=rnd.choice(PROGS[mood]), bpm=bpm, seed=rnd.randint(1, 10 ** 6), pad=pad, lh=rnd.choice(["arp", "block"]) if mood != "citypop80" else "arp",
+                         energy=bpm + ENERGY[mood] - (6 if pad else 0)))
+    calm = sorted(plan, key=lambda q: q["energy"])[:3]; rest = [q for q in plan if q not in calm]; rnd.shuffle(rest)
+    for _t in range(30):                                                  # 같은 분위기가 연속되지 않게 섞기
+        if all(rest[k]["mood"] != rest[k + 1]["mood"] for k in range(len(rest) - 1)): break
+        rnd.shuffle(rest)
+    order = calm + rest                                                   # 첫 3곡은 가장 잔잔한 곡 (에너지 낮은 순)
+    for q in order:
+        if pos >= a.minutes * 60: break
+        i += 1; mood, key, prog, bpm, seed, pad, lh = q["mood"], q["key"], q["prog"], q["bpm"], q["seed"], q["pad"], q["lh"]
         nm = f"t{i:02d}"; bg_prompt, title = SC.pick(mood, rnd, used_scenes)   # 장면과 제목을 함께 정함
         R.comp(nm, key, mood in MINOR, prog, bpm, seed, pad_vol=pad, lh=lh, swing=1 if mood == "citypop80" else 0)
         tex(f"{nm}.wav", f"{nm}_x.wav", a.texture, seed)
@@ -71,8 +86,19 @@ def main():
     os.remove(outwav)
     json.dump(tracks, open(a.out + "_tracks.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     def ts(s): s = int(s); return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
-    desc = "\n".join(f"{ts(t['start'])} {t['title']}" for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n"
+    from collections import Counter
+    cnt = Counter(t["mood"] for t in tracks); dom, n_dom = cnt.most_common(1)[0]; line1, line2 = HEAD[dom] if n_dom / len(tracks) >= .6 else MIXED
+    ms = [m for m, _ in cnt.most_common()]; mins = int(round(pos / 60))
+    intro = (f"{line1} {line2}. 가사 없는 연주곡 {mins}분.\n"
+             f"잔잔한 곡으로 시작해 서서히 깊어지는 흐름입니다. 이번 앨범은 {INTRO[ms[0]]}" + (f"에 {INTRO[ms[1]]}이 더해진 곡들로 채웠습니다." if len(ms) > 1 else "의 곡들로 채웠습니다."))
+    tags = list(TAGS)
+    if "citypop80" in cnt: tags += ["시티팝", "city pop"]
+    hashtags = "#80년대 #90년대 #피아노발라드 #BSideNight"
+    desc = intro + "\n\n" + "\n".join(f"{ts(t['start'])} {t['title']}" for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n\n" + hashtags + "\n"
     open(a.out + "_description.txt", "w", encoding="utf-8").write(desc)
+    title = f"{line1} {line2} | Vol.{a.vol} | B-Side Night"
+    json.dump(dict(title=title, line1=line1, line2=line2, tags=tags, vol=a.vol, minutes=mins), open(a.out + "_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    print("제목:", title)
     print(f"완료: {len(tracks)}곡 약 {pos / 60:.1f}분 -> {a.out}.mp3")
 if __name__ == "__main__":
     main()

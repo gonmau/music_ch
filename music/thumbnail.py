@@ -7,6 +7,10 @@ from PIL import Image, ImageDraw, ImageFilter
 import visual as V
 W, H = 1280, 720
 def make(tracks_path, vol, minutes, out, line1, line2):
+    mp = tracks_path.replace("_tracks.json", "_meta.json")      # 앨범 분위기에 맞춘 문구 (make_album 이 정함)
+    if os.path.exists(mp) and not (line1 or line2):
+        mt = json.load(open(mp, encoding="utf-8")); line1, line2 = mt["line1"], mt["line2"]
+    line1, line2 = line1 or "밤, 혼자 듣는", line2 or "80~90년대 피아노 발라드"
     tr = json.load(open(tracks_path, encoding="utf-8")); base = os.path.dirname(os.path.abspath(tracks_path)); bgp = next((os.path.join(base, t["bg"]) for t in tr if t.get("bg") and os.path.exists(os.path.join(base, t["bg"]))), None)
     a = V.load_bg(bgp) if bgp else V.background(vol * 7 + 1); a = np.clip(a * 1.25, 0, 255)          # 썸네일은 배경을 조금 더 밝게
     g = np.linspace(1, .25, W)[None, :, None]; a = a * (.55 + .45 * g)                               # 왼쪽(글자 쪽)을 더 어둡게
@@ -21,4 +25,4 @@ def make(tracks_path, vol, minutes, out, line1, line2):
     im.convert("RGB").save(out, quality=90); print("썸네일:", out)
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--vol", type=int, default=1); ap.add_argument("--minutes", type=float, default=60); ap.add_argument("--out", required=True)
-    ap.add_argument("--line1", default="밤, 혼자 듣는"); ap.add_argument("--line2", default="80~90년대 피아노 발라드"); a = ap.parse_args(); make(a.tracks, a.vol, a.minutes, a.out, a.line1, a.line2)
+    ap.add_argument("--line1", default=""); ap.add_argument("--line2", default=""); a = ap.parse_args(); make(a.tracks, a.vol, a.minutes, a.out, a.line1, a.line2)

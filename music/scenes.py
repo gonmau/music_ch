@@ -35,6 +35,16 @@ SCENES = {
         ("a seaside road at twilight with soft lights and a calm hazy sea", ["해 질 녘 바닷길", "노을 속 해안도로"]),
         ("a balcony at dusk with a warm sky and potted plants, blurred city behind", ["저녁 발코니", "노을이 번지는 베란다"]),
     ],
+    "newage": [
+        ("morning sunlight falling on a wooden floor in a quiet empty room, soft white curtains", ["아침 햇살이 닿는 방", "고요한 방의 오후"]),
+        ("an open piano with a little dust in soft window light, empty room", ["창가의 오래된 피아노", "먼지 위로 내린 빛"]),
+        ("a quiet library corner with a warm reading lamp and old books", ["서재의 낮은 불빛", "책장 사이의 고요"]),
+        ("a calm lake at dawn with soft mist and a pastel sky", ["안개 낀 호숫가의 새벽", "잔잔한 물결 위의 아침"]),
+        ("white curtains gently moving at a sunlit window, quiet room", ["커튼 사이로 든 빛", "바람이 지나간 창가"]),
+        ("a sunlit empty hallway with long soft shadows", ["긴 그림자의 복도", "빈 복도의 오후"]),
+        ("a teacup and a small plant on a wooden table in soft morning light", ["찻잔 위의 아침", "작은 화분 옆의 시간"]),
+        ("a snowy window with a warm interior glow, quiet winter evening", ["눈 내리는 창가", "겨울 저녁의 온기"]),
+    ],
 }
 def pick(mood, rnd, used):
     """mood 장면 중 아직 덜 쓴 것을 골라 (프롬프트, 제목)을 돌려준다. 제목도 겹치지 않게."""
