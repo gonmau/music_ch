@@ -20,10 +20,10 @@ on:
         options: [lp, tape, none]
         default: lp
       corner:
-        description: "비주얼 위치"
+        description: "비주얼 위치 (우하단은 유튜브 워터마크 자리)"
         type: choice
-        options: [br, bl, random]
-        default: br
+        options: [bl, br, random]
+        default: bl
       ai_bg:
         description: "AI 배경 이미지 만들기 (Cloudflare 키 필요)"
         type: boolean

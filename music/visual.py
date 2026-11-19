@@ -119,9 +119,9 @@ class Scene:
             im = Image.fromarray(a.astype("uint8")).resize((int(W * z), int(H * z)), Image.BILINEAR); ox, oy = int(W * (z - 1) / 2), int(H * (z - 1) / 2); a = np.asarray(im.crop((ox, oy, ox + W, oy + H))).astype("float32")
         fr = Image.fromarray(np.clip(a + grain, 0, 255).astype("uint8")).convert("RGBA"); wd = self.widget(tl, audio, sr, t_abs)
         right = self.corner == "br"; wx = W - MARGIN - wd.width if right else MARGIN; wy = H - MARGIN - wd.height
-        d = ImageDraw.Draw(fr, "RGBA"); tx = MARGIN if right else W - MARGIN; anc = "ls" if right else "rs"       # 제목은 반대쪽 아래 모서리에 작게
+        d = ImageDraw.Draw(fr, "RGBA")       # 제목은 좌상단에 작게 (우하단은 유튜브 워터마크 자리)
         sh = Image.new("RGBA", wd.size, (0, 0, 0, 0)); fr.alpha_composite(wd, (int(wx), int(wy)))
-        d.text((tx, H - MARGIN - 34), "지금 재생 중", font=F(14), fill=(230, 200, 160, 170), anchor=anc); d.text((tx, H - MARGIN), self.title, font=F(24), fill=(250, 236, 214, 235), anchor=anc)
+        d.text((MARGIN, MARGIN + 14), "지금 재생 중", font=F(14), fill=(230, 200, 160, 170), anchor="ls"); d.text((MARGIN, MARGIN + 46), self.title, font=F(24), fill=(250, 236, 214, 235), anchor="ls")
         return fr
 
 def load_audio(path, sr=16000):
@@ -139,7 +139,7 @@ def encoder(audio, out, start=None, dur=None, w=W, h=H):
 def grains(): 
     rnd = np.random.RandomState(1); return [rnd.randn(H // 2, W // 2, 1).repeat(2, 0).repeat(2, 1).astype("float32") * 2.2 for _ in range(6)]
 
-def render_album(audio, tracks, out, seed=1, styles=None, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, corners="br"):
+def render_album(audio, tracks, out, seed=1, styles=None, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, corners="bl"):
     styles = styles or STYLES; rnd = random.Random(seed); sr = 16000; a16 = load_audio(audio, sr); gr = grains(); last = None; scenes = []
     for t in tracks:
         st = rnd.choice([s for s in styles if s != last] or styles); last = st; t["style"] = st
@@ -166,7 +166,7 @@ def render_preview(style, midi, audio, start, dur, title, out):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("mode", choices=["album", "preview"]); ap.add_argument("--audio", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="br", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H)
+    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="bl", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H)
     ap.add_argument("--style", default="keys", choices=STYLES); ap.add_argument("--midi", default=""); ap.add_argument("--start", type=float, default=0); ap.add_argument("--dur", type=float, default=20); ap.add_argument("--title", default="밤 열한 시의 피아노")
     a = ap.parse_args()
     if a.mode == "album":
