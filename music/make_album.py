@@ -47,6 +47,7 @@ def main():
         R.comp(nm, key, mood in MINOR, prog, bpm, seed, pad_vol=pad, lh=lh, swing=1 if mood == "citypop80" else 0)
         tex(f"{nm}.wav", f"{nm}_x.wav", a.texture, seed)
         d, _ = sf.read(f"{nm}_x.wav", dtype="float32"); d = d / max(1e-6, np.sqrt((d ** 2).mean())) * .12   # 곡마다 비슷한 음량
+        os.makedirs(os.path.join(cwd, a.out + "_midi"), exist_ok=True); shutil.copy(f"{nm}.mid", os.path.join(cwd, a.out + "_midi", f"{nm}.mid"))   # 건반 비주얼용
         for f in (f"{nm}.wav", f"{nm}_x.wav", f"{nm}_p.wav"):
             try: os.remove(f)
             except OSError: pass
@@ -60,7 +61,7 @@ def main():
             w.write(np.clip(body[:-X], -1, 1)); tail = body[-X:]
         else:
             tail = body
-        tracks.append(dict(i=i, title=names[i - 1], start=round(start, 1), mood=mood, key=key, bpm=bpm, pad=pad > 0, lh=lh))
+        tracks.append(dict(i=i, title=names[i - 1], start=round(start, 2), dur=round(len(d) / SR, 2), midi=f"{os.path.basename(a.out)}_midi/{nm}.mid", mood=mood, key=key, bpm=bpm, pad=pad > 0, lh=lh))
         pos = start + len(d) / SR
     if tail is not None:
         w.write(np.clip(tail, -1, 1))
