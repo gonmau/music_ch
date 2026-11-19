@@ -1,0 +1,8 @@
+numpy
+scipy
+soundfile
+pretty_midi
+pillow
+requests
+google-api-python-client
+google-auth

@@ -14,3 +14,9 @@
 ## 크레딧 (업로드 설명에 꼭 넣을 것)
 Piano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)
 음악은 코드로 합성한 AI·합성 콘텐츠이므로 유튜브 업로드 때 합성 콘텐츠 표시를 켠다.
+
+## 자동 제작 (GitHub Actions: music-album)
+폰의 GitHub 앱 → Actions → **music-album** → Run workflow. 입력: 회차, 길이(분), 곡 분위기, 질감(LP/카세트), 비주얼 위치, AI 배경, 업로드 여부, 예약 공개 시각(한국시간).
+흐름: `make_album.py`(곡) → `ai_bg.py`(곡마다 배경) → `visual.py`(영상, 곡마다 비주얼 랜덤) → `thumbnail.py` → `upload.py`(비공개 업로드·썸네일·합성 콘텐츠 표시).
+Secrets: `CF_ACCOUNT_ID`, `CF_API_TOKEN`(AI 배경), `YT_CLIENT_ID`, `YT_CLIENT_SECRET`, `YT_REFRESH_TOKEN`(이 음악 채널 전용 토큰, 썸네일까지 쓰려면 force-ssl 권한 포함), `DISCORD_WEBHOOK_URL`(선택).
+피아노 샘플은 실행 때 `sfzinstruments/SalamanderGrandPiano` 를 받아 캐시한다.

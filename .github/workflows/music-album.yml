@@ -1,0 +1,119 @@
+name: music-album
+
+# 1시간 앨범 만들기: 곡 합성 -> (AI 배경) -> 영상 -> 썸네일 -> (유튜브 비공개 업로드)
+# 폰의 GitHub 앱 -> Actions -> music-album -> Run workflow. 결과 영상·썸네일·설명은 Artifacts 로도 받을 수 있음(7일).
+on:
+  workflow_dispatch:
+    inputs:
+      vol:
+        description: "회차 번호 (제목·썸네일·시드에 사용)"
+        default: "1"
+      minutes:
+        description: "영상 길이(분)"
+        default: "60"
+      moods:
+        description: "곡 분위기 (쉼표): ballad90,minor80,citypop80"
+        default: "ballad90,minor80,citypop80"
+      texture:
+        description: "질감"
+        type: choice
+        options: [lp, tape, none]
+        default: lp
+      corner:
+        description: "비주얼 위치"
+        type: choice
+        options: [br, bl, random]
+        default: br
+      ai_bg:
+        description: "AI 배경 이미지 만들기 (Cloudflare 키 필요)"
+        type: boolean
+        default: true
+      upload:
+        description: "유튜브에 비공개 업로드"
+        type: boolean
+        default: false
+      publish_at:
+        description: "예약 공개 시각, 한국시간 (예: 2026-11-26 20:00). 비우면 비공개로만"
+        default: ""
+      title_extra:
+        description: "제목 뒤에 붙일 말 (선택)"
+        default: ""
+
+concurrency:
+  group: music-album
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  album:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONUNBUFFERED: "1"
+      SALAMANDER_DIR: ${{ github.workspace }}/salamander/Samples
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      VOL: ${{ github.event.inputs.vol }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 피아노 샘플 (Salamander Grand Piano, CC BY 3.0)
+        uses: actions/cache@v4
+        with:
+          path: salamander
+          key: salamander-v3
+      - run: |
+          [ -d salamander/Samples ] || git clone --depth 1 https://github.com/sfzinstruments/SalamanderGrandPiano salamander
+      - name: 곡 만들기
+        working-directory: music
+        run: |
+          mkdir -p out
+          python make_album.py --minutes "${{ github.event.inputs.minutes }}" --out "out/vol$(printf %02d $VOL)" --seed "$VOL" \
+            --texture "${{ github.event.inputs.texture }}" --moods "${{ github.event.inputs.moods }}"
+      - name: AI 배경 이미지
+        if: ${{ github.event.inputs.ai_bg == 'true' }}
+        working-directory: music
+        continue-on-error: true
+        run: python ai_bg.py --tracks "out/vol$(printf %02d $VOL)_tracks.json" --seed "$VOL"
+      - name: 영상 만들기 (곡마다 비주얼 랜덤)
+        working-directory: music
+        run: |
+          N="out/vol$(printf %02d $VOL)"
+          python visual.py album --audio "$N.mp3" --tracks "${N}_tracks.json" --out "$N.mp4" --seed "$VOL" --corner "${{ github.event.inputs.corner }}"
+      - name: 썸네일
+        working-directory: music
+        run: |
+          N="out/vol$(printf %02d $VOL)"
+          python thumbnail.py --tracks "${N}_tracks.json" --vol "$VOL" --minutes "${{ github.event.inputs.minutes }}" --out "${N}_thumb.jpg"
+      - name: 유튜브 업로드
+        if: ${{ github.event.inputs.upload == 'true' }}
+        working-directory: music
+        run: |
+          N="out/vol$(printf %02d $VOL)"
+          TITLE="밤, 혼자 LP로 듣는 80~90년대 피아노 발라드 | Vol.${VOL} ${{ github.event.inputs.title_extra }}"
+          python upload.py --video "$N.mp4" --thumb "${N}_thumb.jpg" --title "$TITLE" --desc "${N}_description.txt" --publish-at "${{ github.event.inputs.publish_at }}"
+      - name: 결과 보관 (7일)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vol${{ github.event.inputs.vol }}
+          path: |
+            music/out/vol*.mp4
+            music/out/vol*_thumb.jpg
+            music/out/vol*_description.txt
+            music/out/vol*_tracks.json
+          retention-days: 7
+      - name: 디스코드 알림
+        if: ${{ always() && env.DISCORD_WEBHOOK_URL != '' }}
+        run: |
+          curl -sS -F "payload_json={\"content\":\"🎵 music-album Vol.${VOL}: ${{ job.status }} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            -F "file1=@music/out/vol$(printf %02d $VOL)_thumb.jpg" "$DISCORD_WEBHOOK_URL" >/dev/null || true
