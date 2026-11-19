@@ -25,6 +25,13 @@ def background(seed):
     a = np.asarray(img.filter(ImageFilter.GaussianBlur(14))).astype("float32"); yy, xx = np.ogrid[:H, :W]
     return a * np.clip(1 - .55 * (((xx - W / 2) / (W / 1.25)) ** 2 + ((yy - H / 2) / (H / 1.15)) ** 2), .25, 1)[..., None]
 
+def load_bg(path):
+    """AI 배경 이미지를 1280x720으로 맞추고 어둡고 따뜻하게, 가장자리를 어둡게 (비주얼과 글자가 잘 보이도록)"""
+    im = Image.open(path).convert("RGB"); w, h = im.size; r = max(W / w, H / h); im = im.resize((int(w * r) + 1, int(h * r) + 1), Image.LANCZOS)
+    ox, oy = (im.width - W) // 2, (im.height - H) // 2; a = np.asarray(im.crop((ox, oy, ox + W, oy + H))).astype("float32") * .62
+    a *= np.array([1.04, 1.0, .93]); yy, xx = np.ogrid[:H, :W]
+    return a * np.clip(1 - .6 * (((xx - W / 2) / (W / 1.2)) ** 2 + ((yy - H / 2) / (H / 1.1)) ** 2), .3, 1)[..., None]
+
 def keyboard_layout(lo=36, hi=96, x0=90, x1=W - 90):
     whites = [m for m in range(lo, hi + 1) if m % 12 in (0, 2, 4, 5, 7, 9, 11)]; wk = (x1 - x0) / len(whites); pos = {}
     for i, m in enumerate(whites): pos[m] = (x0 + i * wk, wk, False)
@@ -94,9 +101,9 @@ CW, CH, WS = 800, 460, 2          # 위젯 캔버스(2배 크기로 그린 뒤 �
 MARGIN = 48
 
 class Scene:
-    def __init__(self, style, notes, title, seed, dur, corner="br"):
+    def __init__(self, style, notes, title, seed, dur, corner="br", bg_path=None):
         self.style, self.notes, self.title, self.dur, self.corner = style, notes, title, dur, corner
-        self.bg = background(seed); self.pos = keyboard_layout(36, 96, 0, CW); self.bars = np.zeros(56)
+        self.bg = load_bg(bg_path) if bg_path and os.path.exists(bg_path) else background(seed); self.pos = keyboard_layout(36, 96, 0, CW); self.bars = np.zeros(56)
         self.rec = make_record(400 if style == "lp" else 280) if style in ("lp", "both") else None
     def widget(self, tl, audio, sr, t_abs):
         w = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); s = self.style; R = self.corner == "br"      # 모서리 쪽으로 붙여 정렬
@@ -138,7 +145,7 @@ def render_album(audio, tracks, out, seed=1, styles=None, base_dir=".", w=W, h=H
         st = rnd.choice([s for s in styles if s != last] or styles); last = st; t["style"] = st
         mid = os.path.join(base_dir, t["midi"]); notes = [n for i in pm.PrettyMIDI(mid).instruments for n in i.notes]
         corner = corners if corners in ("br", "bl") else rnd.choice(["br", "bl"]); t["corner"] = corner
-        scenes.append((t["start"], Scene(st, notes, t["title"], seed * 100 + t["i"], t["dur"], corner), t["start"] + t["dur"]))
+        scenes.append((t["start"], Scene(st, notes, t["title"], seed * 100 + t["i"], t["dur"], corner, os.path.join(base_dir, t["bg"]) if t.get("bg") else None), t["start"] + t["dur"]))
     total = len(a16) / sr; p = encoder(audio, out, w=w, h=h); bounds = [tracks[i + 1]["start"] + xfade / 2 for i in range(len(tracks) - 1)] + [1e9]
     for k in range(int(total * FPS)):
         T = k / FPS; g = gr[k % 6]
