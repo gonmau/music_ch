@@ -28,7 +28,7 @@ def background(seed):
 
 def load_bg(path):
     """AI 배경 이미지를 1280x720으로 맞추고 어둡고 따뜻하게, 가장자리를 어둡게 (비주얼과 글자가 잘 보이도록)"""
-    im = Image.open(path).convert("RGB").filter(ImageFilter.GaussianBlur(1.6)); w, h = im.size   # 약한 블러: 혹시 생긴 글자를 읽을 수 없게 + 아날로그 느낌
+    im = Image.open(path).convert("RGB").filter(ImageFilter.GaussianBlur(3)); w, h = im.size   # 약한 블러: 혹시 생긴 글자를 읽을 수 없게 + 아날로그 느낌
     r = max(W / w, H / h); im = im.resize((int(w * r) + 1, int(h * r) + 1), Image.LANCZOS)
     ox, oy = (im.width - W) // 2, (im.height - H) // 2; a = np.asarray(im.crop((ox, oy, ox + W, oy + H))).astype("float32") * .62
     a *= np.array([1.04, 1.0, .93]); yy, xx = np.ogrid[:H, :W]
@@ -127,6 +127,7 @@ class Scene:
         d = ImageDraw.Draw(fr, "RGBA")       # 제목은 좌상단에 작게 (우하단은 유튜브 워터마크 자리)
         sh = Image.new("RGBA", wd.size, (0, 0, 0, 0)); fr.alpha_composite(wd, (int(wx), int(wy)))
         d.text((MARGIN, MARGIN + int(30 * _S)), self.title, font=F(26 * _S), fill=(250, 236, 214, 235), anchor="ls")
+        if getattr(self, "title_en", ""): d.text((MARGIN, MARGIN + int(58 * _S)), self.title_en, font=F(17 * _S), fill=(235, 220, 196, 200), anchor="ls")
         return fr
 
 def load_audio(path, sr=16000):
@@ -223,6 +224,7 @@ def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, 
         for j in range(n):          # 곡 제목: 이전 제목이 사라진 뒤 새 제목이 나타남
             ta = int(235 * _ease((T - (S[j] + (.3 if j else 1.0))) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7) if j < n - 1 else 1))
             if ta > 0: d.text((MARGIN, MARGIN + int(30 * _S)), tracks[j]["title"], font=F(26 * _S), fill=(250, 236, 214, ta), anchor="ls")
+            if ta > 0 and tracks[j].get("title_en"): d.text((MARGIN, MARGIN + int(58 * _S)), tracks[j]["title_en"], font=F(17 * _S), fill=(235, 220, 196, int(ta * .85)), anchor="ls")
         wd = wd.resize((int(CW // WS * _S), int(CH // WS * _S)), Image.LANCZOS); fr.alpha_composite(wd, (MARGIN, H - MARGIN - wd.height))
         p.stdin.write(np.asarray(fr.convert("RGB")).tobytes())
         if k % (FPS * 300) == 0: print(f"  {T / 60:.0f}/{total / 60:.0f}분", flush=True)

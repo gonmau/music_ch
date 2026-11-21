@@ -79,7 +79,7 @@ def main():
             w.write(np.clip(body[:-X], -1, 1)); tail = body[-X:]
         else:
             tail = body
-        tracks.append(dict(i=i, title=title, bg_prompt=bg_prompt, start=round(start, 2), dur=round(len(d) / SR, 2), midi=f"{os.path.basename(a.out)}_midi/{nm}.mid", mood=mood, key=key, bpm=bpm, pad=pad > 0, lh=lh))
+        tracks.append(dict(i=i, title=title, title_en=SC.en_title(title), bg_prompt=bg_prompt, start=round(start, 2), dur=round(len(d) / SR, 2), midi=f"{os.path.basename(a.out)}_midi/{nm}.mid", mood=mood, key=key, bpm=bpm, pad=pad > 0, lh=lh))
         pos = start + len(d) / SR
     if tail is not None:
         w.write(np.clip(tail, -1, 1))
@@ -99,9 +99,9 @@ def main():
     hashtags = "#80년대 #90년대 #피아노발라드 #BSideNight"
     head_en = HEAD_EN[dom] if n_dom / len(tracks) >= .6 else MIXED_EN
     intro_en = (f"{head_en}. Instrumental, no vocals. {mins} min.\nStarts quietly and slowly deepens. This album blends {INTRO_EN[ms[0]]}" + (f" with {INTRO_EN[ms[1]]}." if len(ms) > 1 else "."))
-    tl = "\n".join(f"{ts(t['start'])} {t['title']}" for t in tracks); credit = "Piano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\nSynthesized music (AI / code-generated)."
+    tl = "\n".join(f"{ts(t['start'])} {t['title_en'] or t['title']}" for t in tracks); credit = "Piano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\nSynthesized music (AI / code-generated)."
     desc_en = intro_en + "\n\n" + tl + "\n\n" + credit + "\n\n#80s #90s #PianoBallad #BSideNight\n"
-    desc = intro + "\n\n" + intro_en + "\n\n" + "\n".join(f"{ts(t['start'])} {t['title']}" for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n\n" + hashtags + "\n"
+    desc = intro + "\n\n" + intro_en + "\n\n" + "\n".join(f"{ts(t['start'])} {t['title']}" + (f" ({t['title_en']})" if t['title_en'] else "") for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n\n" + hashtags + "\n"
     open(a.out + "_description.txt", "w", encoding="utf-8").write(desc)
     title = f"{line1} {line2} ({head_en}) | Vol.{a.vol} | B-Side Night"; title_en = f"{head_en} | Vol.{a.vol} | B-Side Night"
     json.dump(dict(title=title, title_en=title_en, desc_en=desc_en, line1_en=head_en, line1=line1, line2=line2, tags=tags, vol=a.vol, minutes=mins), open(a.out + "_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
