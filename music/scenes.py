@@ -11,7 +11,7 @@ SCENES = {
         ("a wooden desk with a handwritten letter, a cup of coffee and a small lamp at night", ["식어 가는 커피와 편지", "오래된 편지의 온도"]),
         ("a vintage record player on a wooden shelf beside a dark window at night, warm lamp", ["창가 턴테이블의 밤", "돌아가는 레코드"]),
         ("a cassette player and old headphones on a table beside a warm lamp", ["카세트를 감던 밤", "낡은 이어폰의 노래"]),
-        ("a quiet bedroom at night, sheer curtains with soft streetlight glow, empty bed", ["커튼에 스민 가로등", "잠들지 못한 방"]),
+        ("a quiet bedroom at night, sheer curtains with soft streetlight glow, empty bed", ["커튼에 스민 가로등", "가로등이 드는 방"]),
         ("an old television glowing softly in a dark living room, empty sofa", ["꺼지지 않은 텔레비전", "새벽 TV의 푸른빛"]),
         ("a warm candle and a vase of dried flowers on a night table near a window", ["촛불 곁의 오래된 꽃", "마른 꽃의 여운"]),
     ],
