@@ -9,7 +9,7 @@ def main(out):
     d = ImageDraw.Draw(im, "RGBA"); cx, cy = W // 2, H // 2
     rec = V.make_record(900); sh = Image.new("RGBA", (W, H), (0, 0, 0, 0)); ImageDraw.Draw(sh).ellipse([cx + 330, cy - 440, cx + 1230, cy + 480], fill=(0, 0, 0, 120)); im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(30)))
     im.alpha_composite(rec.rotate(-30, resample=Image.BICUBIC), (cx + 330, cy - 450))          # 안전 영역 오른쪽, 일부는 바깥으로
-    for txt, sz, y, col in (("B-SIDE NIGHT", 150, cy - 10, (255, 240, 214)), ("밤, 혼자, LP로 듣는 80~90년대 피아노", 54, cy + 80, (255, 196, 120)), ("매주 1시간 · 가사 없는 연주곡 플레이리스트", 40, cy + 150, (235, 215, 185))):
+    for txt, sz, y, col in (("B-SIDE NIGHT", 150, cy - 10, (255, 240, 214)), ("Late-night piano ballads  ·  80s & 90s  ·  on vinyl", 50, cy + 80, (255, 196, 120)), ("밤, 혼자 듣는 80~90년대 피아노  ·  매주 1시간", 38, cy + 150, (235, 215, 185))):
         for dx in (4,): d.text((cx - 760 + dx, y + dx), txt, font=V.F(sz), fill=(0, 0, 0, 160), anchor="ls")
         d.text((cx - 760, y), txt, font=V.F(sz), fill=col, anchor="ls")
     im.convert("RGB").save(out, quality=92); print(out)
