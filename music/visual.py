@@ -181,53 +181,46 @@ def draw_lp(w, rec, size, cx, cy, ang_deg, geom, theta, lift, alpha, dy):
     hx, hy = tip; d.ellipse([hx - 10, hy - 10, hx + 10, hy + 10], fill=(150, 146, 142, 255))
     if alpha < 1: layer.putalpha(layer.getchannel("A").point(lambda v: int(v * alpha)))
     w.alpha_composite(layer)
-D0, D1, LIFT = .4, 1.1, 2.8        # 바늘 내리기 시작/착지(판이 나타난 뒤 초), 곡이 끝나기 전 바늘 올리는 시점
-def needle_sfx(audio, out, tracks, S, B, total, vol=1.0):
-    """바늘 착지(툭 + 지지직 번지는 소리)와 바늘 올림(작은 툭)을 합성해 원래 소리 위에 얹은 wav 를 만든다."""
+D0, D1, END = .4, 1.1, 3.0        # 처음에만: 바늘 내리기 시작/착지(초), 앨범 끝나기 전 바늘 올리는 시점
+def needle_sfx(audio, out, bounds, total, vol=1.0):
+    """처음 바늘 착지(아주 작은 툭 + 지지직)와, 곡 사이 홈 구간을 지나는 은은한 지직임만 합성해 원래 소리 위에 얹는다."""
     SR = 48000; raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", audio, "-f", "f32le", "-ac", "2", "-ar", str(SR), "-"], capture_output=True, check=True).stdout
     x = np.frombuffer(raw, np.float32).reshape(-1, 2).copy(); rnd = np.random.RandomState(5)
-    def add(t, sig, pad=0):
+    def add(t, sig):
         i = int(t * SR)
         if i < 0 or i >= len(x): return
         sig = sig[:len(x) - i]; x[i:i + len(sig)] += (sig * vol)[:, None]
     def thump(dur, f, amp):
         t = np.arange(int(SR * dur)) / SR; return amp * np.sin(2 * np.pi * f * t * (1 - .3 * t / dur)) * np.exp(-t / (dur / 4))
-    def crackle(dur, amp):
-        n = int(SR * dur); env = np.exp(-np.arange(n) / SR / (dur / 2.5)); sig = np.zeros(n)
-        for i in np.flatnonzero(rnd.rand(n) < 90 / SR * (1 + 3 * env)): sig[i] = rnd.randn() * amp * (.3 + rnd.rand())
-        return np.convolve(sig, np.hanning(5), "same") + rnd.randn(n) * amp * .05 * env
-    for j in range(len(tracks)):
-        a0 = (S[j] - 0.5 if j else 0.0); land = a0 + D1; lift = B[j] - LIFT
-        c = crackle(1.4, .09); c[:12000] += thump(.25, 90, .16); add(land, c); add(land - .04, rnd.randn(int(SR * .02)) * .12)
-        if j < len(tracks) - 1: c = crackle(.35, .05); c[:5760] += thump(.12, 120, .07); add(lift, c); add(lift + 1.1, thump(.15, 80, .08))
-    sf_mod = __import__("soundfile"); sf_mod.write(out, np.clip(x, -1, 1), SR)
+    def crackle(dur, amp, env):
+        n = int(SR * dur); e = env(n); sig = np.zeros(n)
+        for i in np.flatnonzero(rnd.rand(n) < 70 / SR * (1 + 2 * e)): sig[i] = rnd.randn() * amp * (.3 + rnd.rand())
+        return (np.convolve(sig, np.hanning(5), "same") + rnd.randn(n) * amp * .08) * e
+    c = crackle(1.2, .03, lambda n: np.exp(-np.arange(n) / SR / .5)); c[:9600] += thump(.2, 90, .05); add(D1, c)           # 맨 처음 바늘 착지
+    for b in bounds: add(b - 1.5, crackle(3.0, .022, lambda n: np.sin(np.linspace(0, np.pi, n)) ** 2))                   # 곡 사이 홈 구간(살짝 지직)
+    c = crackle(.4, .02, lambda n: np.exp(-np.arange(n) / SR / .15)); c[:4800] += thump(.1, 110, .03); add(total - END, c)  # 마지막에 바늘 올림
+    __import__("soundfile").write(out, np.clip(x, -1, 1), SR)
 def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, t0=None, t1=None, sfx=True):
-    """LP 한 가지만: 곡 시작에 바늘이 내려와 홈을 따라 안쪽으로 읽어 가고, 곡이 끝나면 바늘이 올라가 제자리로 돌아간 뒤 다음 판(라벨 색·번호 다름)이 올라온다."""
+    """LP 한 장이 앨범 내내 계속 돈다: 처음에 판이 올라오고 바늘이 내려앉은 뒤, 바늘은 홈을 따라 천천히 안쪽으로 이동. 곡이 바뀔 땐 제목만 바뀌고(홈 사이를 지나는 은은한 지직임) 마지막에 바늘이 올라간다."""
     sr = 16000; a16 = load_audio(audio, sr); gr = grains(); size = 400; cx, cy = 250, CH * .5; geom = _arm_geom(size, cx, cy); th_out, th_in = geom[2], geom[3]; th_rest = th_out + .5
-    scenes, recs = [], []
-    for t in tracks:
-        mid = os.path.join(base_dir, t["midi"]); notes = []
-        scenes.append(Scene("lp", notes, t["title"], 7 * 100 + t["i"], t["dur"], "bl", os.path.join(base_dir, t["bg"]) if t.get("bg") else None)); recs.append(make_record(size, LABELS[(t["i"] - 1) % len(LABELS)], f"{t['i']:02d}"))
-    total = len(a16) / sr; n = len(tracks); S = [0.5] + [tracks[i]["start"] + xfade / 2 for i in range(1, n)]; B = S[1:] + [total + 3]; bounds = B[:-1] + [1e9]
-    if sfx: mixed = out + ".sfx.wav"; needle_sfx(audio, mixed, tracks, S, B, total); audio = mixed
-    t0 = 0 if t0 is None else t0; t1 = total if t1 is None else min(t1, total); p = encoder(audio, out, t0, t1 - t0, w, h) if (t0 or t1 < total) else encoder(audio, out, w=w, h=h); ang = [0.0] * n
+    scenes = [Scene("lp", [], t["title"], 700 + t["i"], t["dur"], "bl", os.path.join(base_dir, t["bg"]) if t.get("bg") else None) for t in tracks]; rec = make_record(size); n = len(tracks)
+    total = len(a16) / sr; B = [tracks[i + 1]["start"] + xfade / 2 for i in range(n - 1)] + [total]; bounds = B[:-1] + [1e9]; S = [0.0] + B[:-1]; e0 = total - END
+    if sfx: mixed = out + ".sfx.wav"; needle_sfx(audio, mixed, B[:-1], total); audio = mixed
+    t0 = 0 if t0 is None else t0; t1 = total if t1 is None else min(t1, total); p = encoder(audio, out, t0, t1 - t0, w, h) if (t0 or t1 < total) else encoder(audio, out, w=w, h=h); ang = 0.0
     for k in range(int(t0 * FPS), int(t1 * FPS)):
         T = k / FPS; g = gr[k % 6]
         def base(j): return scenes[j].base(max(0, T - tracks[j]["start"]), g)
         near = next((j for j in range(n - 1) if abs(T - bounds[j]) < blend / 2), None)
         f = Image.blend(base(near), base(near + 1), (T - bounds[near] + blend / 2) / blend) if near is not None else base(next(j for j, bb in enumerate(bounds) if T < bb))
         wd = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); fr = f.convert("RGBA"); d = ImageDraw.Draw(fr, "RGBA")
-        for j in range(n):
-            a0 = S[j] - 0.5 if j else 0.0; e0 = B[j] - LIFT; vis_in = _ease((T - a0) / .8); vis_out = _ease((T - (B[j] - .5)) / 1.2) if j < n - 1 else 0
-            alpha = vis_in * (1 - vis_out)
-            if alpha <= 0: continue
-            spd = _ease((T - a0) / 1.6) * (1 - .75 * _ease((T - (B[j] - 2.0)) / 1.5)); ang[j] = ang[j] + spd / FPS * 360 * .555
-            if T < a0 + D0: th, lift = th_rest, 1.0
-            elif T < a0 + D1: e = _ease((T - a0 - D0) / (D1 - D0)); th = th_rest + (th_out - th_rest) * e; lift = 1 - _ease((T - a0 - D1 + .3) / .3)
-            elif T < e0: th, lift = th_out + (th_in - th_out) * (T - a0 - D1) / max(1, e0 - a0 - D1), 0.0
-            else: x = T - e0; th = th_in + (th_rest - th_in) * _ease((x - .4) / .8); lift = _ease(x / .4)
-            draw_lp(wd, recs[j], size, cx, cy, ang[j], geom, th, lift, alpha, (1 - vis_in) * 70 + vis_out * 70)
-            ta = int(235 * _ease((T - (S[j] + .3)) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7))) if j else int(235 * _ease((T - 1.0) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7)))
+        alpha = _ease(T / .8); spd = _ease(T / 1.6) * (1 - .75 * _ease((T - (e0 + .5)) / 2.0)); ang += spd / FPS * 360 * .555
+        if T < D0: th, lift = th_rest, 1.0
+        elif T < D1: th = th_rest + (th_out - th_rest) * _ease((T - D0) / (D1 - D0)); lift = 1 - _ease((T - D1 + .3) / .3)
+        elif T < e0: th, lift = th_out + (th_in - th_out) * (T - D1) / max(1, e0 - D1), 0.0
+        else: x = T - e0; th = th_in + (th_rest - th_in) * _ease((x - .4) / .8); lift = _ease(x / .4)
+        draw_lp(wd, rec, size, cx, cy, ang, geom, th, lift, alpha, (1 - alpha) * 70)
+        for j in range(n):          # 곡 제목: 이전 제목이 사라진 뒤 새 제목이 나타남
+            ta = int(235 * _ease((T - (S[j] + (.3 if j else 1.0))) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7) if j < n - 1 else 1))
             if ta > 0: d.text((MARGIN, MARGIN + 30), tracks[j]["title"], font=F(26), fill=(250, 236, 214, ta), anchor="ls")
         wd = wd.resize((CW // WS, CH // WS), Image.LANCZOS); fr.alpha_composite(wd, (MARGIN, H - MARGIN - wd.height))
         p.stdin.write(np.asarray(fr.convert("RGB")).tobytes())
