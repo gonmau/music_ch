@@ -91,7 +91,7 @@ jobs:
         working-directory: music
         run: |
           N="out/vol$(printf %02d $VOL)"
-          python visual.py album --audio "$N.mp3" --tracks "${N}_tracks.json" --out "$N.mp4" --seed "$VOL" --corner "${{ github.event.inputs.corner }}"
+          python visual.py album --audio "$N.mp3" --tracks "${N}_tracks.json" --out "$N.mp4" --lp --seed "$VOL" --corner "${{ github.event.inputs.corner }}"
       - name: 썸네일
         working-directory: music
         run: |

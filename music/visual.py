@@ -53,19 +53,20 @@ def draw_keys(fr, pos, h, t, notes, ybase):
             d.rectangle([x, ybase, x + w - 1.5, ybase + hh + (3 * e if not b else 0)], fill=tuple(int(base[i] * (1 - e) + AMBER[i] * e) for i in range(3)) + (235,), outline=(10, 10, 12, 255))
             if e > .05: d.rectangle([x - 4, ybase - 14 * e, x + w + 2, ybase], fill=AMBER + (int(60 * e),))
 
-def make_record(size):
+def make_record(size, label=(196, 74, 56), num=""):
     S = size * 2; rec = Image.new("RGBA", (S, S), (0, 0, 0, 0)); d = ImageDraw.Draw(rec); d.ellipse([0, 0, S - 1, S - 1], fill=(14, 14, 16, 255))
     for r in range(int(S * .24), int(S * .49), 6): d.ellipse([S / 2 - r, S / 2 - r, S / 2 + r, S / 2 + r], outline=(32, 32, 36, 255))
     sh = Image.new("RGBA", (S, S), (0, 0, 0, 0)); sd = ImageDraw.Draw(sh)
     for ang in (35, 215): sd.pieslice([0, 0, S - 1, S - 1], ang - 9, ang + 9, fill=(255, 255, 255, 34))
     rec = Image.alpha_composite(rec, sh.filter(ImageFilter.GaussianBlur(10))); d = ImageDraw.Draw(rec); lr = int(S * .17)
-    d.ellipse([S / 2 - lr, S / 2 - lr, S / 2 + lr, S / 2 + lr], fill=(196, 74, 56, 255)); f = F(S * .028)
-    d.text((S / 2, S / 2 - S * .06), "B-SIDE NIGHT", font=f, fill=(250, 226, 190), anchor="mm"); d.text((S / 2, S / 2 + S * .075), "SIDE B · 33 RPM", font=f, fill=(250, 226, 190), anchor="mm")
+    d.ellipse([S / 2 - lr, S / 2 - lr, S / 2 + lr, S / 2 + lr], fill=label + (255,)); f = F(S * .028)
+    d.text((S / 2, S / 2 - S * .06), "B-SIDE NIGHT", font=f, fill=(250, 226, 190), anchor="mm"); d.text((S / 2, S / 2 + S * .075), f"SIDE B · {num}" if num else "SIDE B · 33 RPM", font=f, fill=(250, 226, 190), anchor="mm")
     d.ellipse([S / 2 - 7, S / 2 - 7, S / 2 + 7, S / 2 + 7], fill=(14, 14, 16, 255)); return rec.resize((size, size), Image.LANCZOS)
 
-def draw_record(fr, rec, size, cx, cy, tl):
+def draw_record(fr, rec, size, cx, cy, tl, arm=True):
     sh = Image.new("RGBA", fr.size, (0, 0, 0, 0)); ImageDraw.Draw(sh).ellipse([cx - size / 2 - 14, cy - size / 2 + 8, cx + size / 2 + 14, cy + size / 2 + 30], fill=(0, 0, 0, 120))
     fr.alpha_composite(sh.filter(ImageFilter.GaussianBlur(14))); fr.alpha_composite(rec.rotate(-tl * 360 * .555, resample=Image.BICUBIC), (int(cx - size / 2), int(cy - size / 2)))
+    if not arm: return
     d = ImageDraw.Draw(fr, "RGBA"); px, py = cx + size * .62, cy - size * .55
     d.line([(px, py), (cx + size * .22, cy - size * .08)], fill=(200, 196, 190, 255), width=7); d.ellipse([px - 16, py - 16, px + 16, py + 16], fill=(120, 116, 112, 255))
 
@@ -114,11 +115,13 @@ class Scene:
         elif s == "cassette": draw_cassette(w, CW - 255 if R else 255, CH / 2, tl, min(1, tl / max(1, self.dur)), self.title)
         elif s == "spectrum": self.bars = spectrum_bars(audio, sr, t_abs, self.bars); draw_spectrum(w, self.bars)
         return w.resize((CW // WS, CH // WS), Image.LANCZOS)
-    def frame(self, tl, grain, audio=None, sr=16000, t_abs=0):
+    def base(self, tl, grain):
         z = 1 + .03 * min(1, tl / max(1, self.dur)); a = self.bg
         if z > 1:
             im = Image.fromarray(a.astype("uint8")).resize((int(W * z), int(H * z)), Image.BILINEAR); ox, oy = int(W * (z - 1) / 2), int(H * (z - 1) / 2); a = np.asarray(im.crop((ox, oy, ox + W, oy + H))).astype("float32")
-        fr = Image.fromarray(np.clip(a + grain, 0, 255).astype("uint8")).convert("RGBA"); wd = self.widget(tl, audio, sr, t_abs)
+        return Image.fromarray(np.clip(a + grain, 0, 255).astype("uint8")).convert("RGBA")
+    def frame(self, tl, grain, audio=None, sr=16000, t_abs=0):
+        fr = self.base(tl, grain); wd = self.widget(tl, audio, sr, t_abs)
         right = self.corner == "br"; wx = W - MARGIN - wd.width if right else MARGIN; wy = H - MARGIN - wd.height
         d = ImageDraw.Draw(fr, "RGBA")       # 제목은 좌상단에 작게 (우하단은 유튜브 워터마크 자리)
         sh = Image.new("RGBA", wd.size, (0, 0, 0, 0)); fr.alpha_composite(wd, (int(wx), int(wy)))
@@ -160,6 +163,56 @@ def render_album(audio, tracks, out, seed=1, styles=None, base_dir=".", w=W, h=H
         if k % (FPS * 300) == 0: print(f"  {T / 60:.0f}/{total / 60:.0f}분", flush=True)
     p.stdin.close(); p.wait(); print("완료:", out)
 
+LABELS = [(196, 74, 56), (190, 138, 62), (66, 112, 104), (140, 86, 112), (84, 96, 140)]
+def _ease(x): x = min(1, max(0, x)); return x * x * (3 - 2 * x)
+def _arm_geom(size, cx, cy):
+    P = (cx + size * .62, cy - size * .55); L = math.hypot(P[0] - (cx + size * .22), P[1] - (cy - size * .08))
+    def ang_for(r):      # 바늘 끝이 레코드 중심에서 r 만큼 떨어지는 각도
+        best = min((abs(math.hypot(P[0] + L * math.cos(t) - cx, P[1] + L * math.sin(t) - cy) - r), t) for t in np.linspace(1.2, 3.2, 2000)); return best[1]
+    return P, L, ang_for(size * .47), ang_for(size * .23)
+def draw_lp(w, rec, size, cx, cy, ang_deg, geom, theta, lift, alpha, dy):
+    P, L, _, _ = geom; cy += dy
+    if alpha <= 0: return
+    P = (P[0], P[1] + dy); tip = (P[0] + L * math.cos(theta), P[1] + L * math.sin(theta))
+    layer = Image.new("RGBA", w.size, (0, 0, 0, 0)); draw_record(layer, rec, size, cx, cy, ang_deg / (360 * .555), arm=False)
+    sh = Image.new("RGBA", w.size, (0, 0, 0, 0)); o = 6 + 34 * lift
+    ImageDraw.Draw(sh).line([(P[0] + o, P[1] + o), (tip[0] + o, tip[1] + o)], fill=(0, 0, 0, int(90 - 40 * lift)), width=9); layer.alpha_composite(sh.filter(ImageFilter.GaussianBlur(5 + 8 * lift)))
+    d = ImageDraw.Draw(layer, "RGBA"); d.line([P, tip], fill=(206, 202, 196, 255), width=7); d.ellipse([P[0] - 16, P[1] - 16, P[0] + 16, P[1] + 16], fill=(120, 116, 112, 255))
+    hx, hy = tip; d.ellipse([hx - 10, hy - 10, hx + 10, hy + 10], fill=(150, 146, 142, 255))
+    if alpha < 1: layer.putalpha(layer.getchannel("A").point(lambda v: int(v * alpha)))
+    w.alpha_composite(layer)
+def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, t0=None, t1=None):
+    """LP 한 가지만: 곡 시작에 바늘이 내려와 홈을 따라 안쪽으로 읽어 가고, 곡이 끝나면 바늘이 올라가 제자리로 돌아간 뒤 다음 판(라벨 색·번호 다름)이 올라온다."""
+    sr = 16000; a16 = load_audio(audio, sr); gr = grains(); size = 400; cx, cy = 250, CH * .5; geom = _arm_geom(size, cx, cy); th_out, th_in = geom[2], geom[3]; th_rest = th_out + .5
+    scenes, recs = [], []
+    for t in tracks:
+        mid = os.path.join(base_dir, t["midi"]); notes = []
+        scenes.append(Scene("lp", notes, t["title"], 7 * 100 + t["i"], t["dur"], "bl", os.path.join(base_dir, t["bg"]) if t.get("bg") else None)); recs.append(make_record(size, LABELS[(t["i"] - 1) % len(LABELS)], f"{t['i']:02d}"))
+    total = len(a16) / sr; n = len(tracks); S = [0.5] + [tracks[i]["start"] + xfade / 2 for i in range(1, n)]; B = S[1:] + [total + 3]; bounds = B[:-1] + [1e9]
+    t0 = 0 if t0 is None else t0; t1 = total if t1 is None else min(t1, total); p = encoder(audio, out, t0, t1 - t0, w, h) if (t0 or t1 < total) else encoder(audio, out, w=w, h=h); ang = [0.0] * n
+    for k in range(int(t0 * FPS), int(t1 * FPS)):
+        T = k / FPS; g = gr[k % 6]
+        def base(j): return scenes[j].base(max(0, T - tracks[j]["start"]), g)
+        near = next((j for j in range(n - 1) if abs(T - bounds[j]) < blend / 2), None)
+        f = Image.blend(base(near), base(near + 1), (T - bounds[near] + blend / 2) / blend) if near is not None else base(next(j for j, bb in enumerate(bounds) if T < bb))
+        wd = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); fr = f.convert("RGBA"); d = ImageDraw.Draw(fr, "RGBA")
+        for j in range(n):
+            a0 = S[j] - 0.5 if j else 0.0; e0 = B[j] - 2.2; vis_in = _ease((T - a0) / 1.2); vis_out = _ease((T - (B[j] - .5)) / 1.2) if j < n - 1 else 0
+            alpha = vis_in * (1 - vis_out)
+            if alpha <= 0: continue
+            spd = _ease((T - a0) / 1.6) * (1 - .75 * _ease((T - (B[j] - 2.0)) / 1.5)); ang[j] = ang[j] + spd / FPS * 360 * .555
+            if T < a0 + 1.0: th, lift = th_rest, 1.0
+            elif T < a0 + 2.0: e = _ease((T - a0 - 1.0) / 1.0); th = th_rest + (th_out - th_rest) * e; lift = 1 - _ease((T - a0 - 1.5) / .5)
+            elif T < e0: th, lift = th_out + (th_in - th_out) * (T - a0 - 2.0) / max(1, e0 - a0 - 2.0), 0.0
+            else: x = T - e0; th = th_in + (th_rest - th_in) * _ease((x - .4) / .8); lift = _ease(x / .4)
+            draw_lp(wd, recs[j], size, cx, cy, ang[j], geom, th, lift, alpha, (1 - vis_in) * 70 + vis_out * 70)
+            ta = int(235 * _ease((T - (S[j] + .3)) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7))) if j else int(235 * _ease((T - 1.0) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7)))
+            if ta > 0: d.text((MARGIN, MARGIN + 30), tracks[j]["title"], font=F(26), fill=(250, 236, 214, ta), anchor="ls")
+        wd = wd.resize((CW // WS, CH // WS), Image.LANCZOS); fr.alpha_composite(wd, (MARGIN, H - MARGIN - wd.height))
+        p.stdin.write(np.asarray(fr.convert("RGB")).tobytes())
+        if k % (FPS * 300) == 0: print(f"  {T / 60:.0f}/{total / 60:.0f}분", flush=True)
+    p.stdin.close(); p.wait(); print("완료:", out)
+
 def render_preview(style, midi, audio, start, dur, title, out):
     notes = [n for i in pm.PrettyMIDI(midi).instruments for n in i.notes]; a16 = load_audio(audio); gr = grains(); sc = Scene(style, notes, title, 3, dur); p = encoder(audio, out, start, dur)
     for k in range(int(dur * FPS)): p.stdin.write(np.asarray(sc.frame(k / FPS, gr[k % 6], a16, 16000, start + k / FPS).convert("RGB")).tobytes())
@@ -167,11 +220,13 @@ def render_preview(style, midi, audio, start, dur, title, out):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("mode", choices=["album", "preview"]); ap.add_argument("--audio", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="bl", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H)
+    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="bl", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H); ap.add_argument("--lp", action="store_true", help="LP 한 가지 스타일만 (바늘 내려오기/곡 바뀔 때 판 교체)"); ap.add_argument("--t0", type=float, default=None); ap.add_argument("--t1", type=float, default=None)
     ap.add_argument("--style", default="keys", choices=STYLES); ap.add_argument("--midi", default=""); ap.add_argument("--start", type=float, default=0); ap.add_argument("--dur", type=float, default=20); ap.add_argument("--title", default="밤 열한 시의 피아노")
     a = ap.parse_args()
     if a.mode == "album":
-        tr = json.load(open(a.tracks, encoding="utf-8")); render_album(a.audio, tr, a.out, a.seed, a.styles.split(","), os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, corners=a.corner)
+        tr = json.load(open(a.tracks, encoding="utf-8"))
+        if a.lp: render_lp(a.audio, tr, a.out, os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, t0=a.t0, t1=a.t1); raise SystemExit
+        render_album(a.audio, tr, a.out, a.seed, a.styles.split(","), os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, corners=a.corner)
         json.dump(tr, open(a.out + ".styles.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     else:
         render_preview(a.style, a.midi, a.audio, a.start, a.dur, a.title, a.out)
