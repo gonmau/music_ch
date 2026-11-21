@@ -14,6 +14,11 @@ on:
       moods:
         description: "곡 분위기 (쉼표): ballad90, minor80, citypop80, newage"
         default: "ballad90,minor80,citypop80"
+      theme:
+        description: "밤의 서사 (고르면 곡 분위기·배경·제목·소개문이 그 테마로 정해지고 moods는 무시됨)"
+        type: choice
+        options: [none, winter, rainy, happy, anticipation, flutter, hard, tired, blue, fire]
+        default: none
       texture:
         description: "질감"
         type: choice
@@ -81,7 +86,7 @@ jobs:
         run: |
           mkdir -p out
           python make_album.py --minutes "${{ github.event.inputs.minutes }}" --out "out/vol$(printf %02d $VOL)" --seed "$VOL" --vol "$VOL" \
-            --texture "${{ github.event.inputs.texture }}" --moods "${{ github.event.inputs.moods }}"
+            --texture "${{ github.event.inputs.texture }}" --moods "${{ github.event.inputs.moods }}" $([ "${{ github.event.inputs.theme }}" != "none" ] && [ -n "${{ github.event.inputs.theme }}" ] && echo --theme "${{ github.event.inputs.theme }}")
       - name: AI 배경 이미지
         if: ${{ github.event.inputs.ai_bg == 'true' }}
         working-directory: music

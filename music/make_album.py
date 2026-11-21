@@ -40,9 +40,11 @@ def tex(inp, out, kind, seed):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--minutes", type=float, default=60); ap.add_argument("--out", default="out/album"); ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--texture", default="lp", choices=["lp", "tape", "none"]); ap.add_argument("--moods", default="ballad90,minor80,citypop80"); ap.add_argument("--vol", type=int, default=1)
+    ap.add_argument("--texture", default="lp", choices=["lp", "tape", "none"]); ap.add_argument("--moods", default="ballad90,minor80,citypop80"); ap.add_argument("--vol", type=int, default=1); ap.add_argument("--theme", default="", help="밤의 서사: winter rainy happy anticipation flutter hard tired blue fire (비우면 기존 방식)")
     ap.add_argument("--pad", type=float, default=.5, help="곡에 약한 패드를 얹을 확률 (0~1)"); ap.add_argument("--xfade", type=float, default=6.0)
-    a = ap.parse_args(); rnd = random.Random(a.seed); moods = a.moods.split(",")
+    a = ap.parse_args(); rnd = random.Random(a.seed); moods = a.moods.split(","); TH = SC.THEMES.get(a.theme) if a.theme else None
+    if a.theme and not TH: raise SystemExit(f"모르는 theme: {a.theme} (가능: {', '.join(SC.THEMES)})")
+    if TH: moods = TH["moods"]
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True); tmp = tempfile.mkdtemp(prefix="album_"); cwd = os.getcwd(); os.chdir(tmp)
     X = int(a.xfade * SR); tracks = []; tail = None; pos = 0.0; last_mood = None; last_key = None
     outwav = os.path.join(cwd, a.out + ".wav"); w = sf.SoundFile(outwav, "w", SR, 2, subtype="PCM_16")
@@ -61,7 +63,7 @@ def main():
     for q in order:
         if pos >= a.minutes * 60: break
         i += 1; mood, key, prog, bpm, seed, pad, lh = q["mood"], q["key"], q["prog"], q["bpm"], q["seed"], q["pad"], q["lh"]
-        nm = f"t{i:02d}"; bg_prompt, title = SC.pick(mood, rnd, used_scenes)   # 장면과 제목을 함께 정함
+        nm = f"t{i:02d}"; bg_prompt, title = SC.pick(mood, rnd, used_scenes, a.theme or None)   # 장면과 제목을 함께 정함
         R.comp(nm, key, mood in MINOR, prog, bpm, seed, pad_vol=pad, lh=lh, swing=1 if mood == "citypop80" else 0)
         tex(f"{nm}.wav", f"{nm}_x.wav", a.texture, seed)
         d, _ = sf.read(f"{nm}_x.wav", dtype="float32"); d = d / max(1e-6, np.sqrt((d ** 2).mean())) * .12   # 곡마다 비슷한 음량
@@ -91,14 +93,15 @@ def main():
     def ts(s): s = int(s); return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
     from collections import Counter
     cnt = Counter(t["mood"] for t in tracks); dom, n_dom = cnt.most_common(1)[0]; line1, line2 = HEAD[dom] if n_dom / len(tracks) >= .6 else MIXED
+    if TH: line1, line2 = TH["line1"], TH["line2"]
     ms = [m for m, _ in cnt.most_common()]; mins = int(round(pos / 60))
-    intro = (f"{line1} {line2}. 가사 없는 연주곡 {mins}분.\n"
-             f"잔잔한 곡으로 시작해 서서히 깊어지는 흐름입니다. 이번 앨범은 {INTRO[ms[0]]}" + (f"에 {INTRO[ms[1]]}이 더해진 곡들로 채웠습니다." if len(ms) > 1 else "의 곡들로 채웠습니다."))
+    intro = (f"{line1} {line2}. 가사 없는 연주곡 {mins}분.\n" +
+             (f"잔잔한 곡으로 시작해 서서히 깊어지는 흐름입니다. 이번 앨범은 {TH['intro_ko']}을 담았습니다." if TH else f"잔잔한 곡으로 시작해 서서히 깊어지는 흐름입니다. 이번 앨범은 {INTRO[ms[0]]}" + (f"에 {INTRO[ms[1]]}이 더해진 곡들로 채웠습니다." if len(ms) > 1 else "의 곡들로 채웠습니다.")))
     tags = list(TAGS)
     if "citypop80" in cnt: tags += ["시티팝", "city pop"]
     hashtags = "#80년대 #90년대 #피아노발라드 #BSideNight"
-    head_en = HEAD_EN[dom] if n_dom / len(tracks) >= .6 else MIXED_EN
-    intro_en = (f"{head_en}. Instrumental, no vocals. {mins} min.\nStarts quietly and slowly deepens. This album blends {INTRO_EN[ms[0]]}" + (f" with {INTRO_EN[ms[1]]}." if len(ms) > 1 else "."))
+    head_en = TH["head_en"] if TH else (HEAD_EN[dom] if n_dom / len(tracks) >= .6 else MIXED_EN)
+    intro_en = (f"{head_en}. Instrumental, no vocals. {mins} min.\nStarts quietly and slowly deepens. " + (f"This album captures {TH['intro_en']}." if TH else f"This album blends {INTRO_EN[ms[0]]}" + (f" with {INTRO_EN[ms[1]]}." if len(ms) > 1 else ".")))
     tl = "\n".join(f"{ts(t['start'])} {t['title_en'] or t['title']}" for t in tracks); credit = "Piano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\nSynthesized music (AI / code-generated)."
     desc_en = intro_en + "\n\n" + tl + "\n\n" + credit + "\n\n#80s #90s #PianoBallad #BSideNight\n"
     desc = intro + "\n\n" + intro_en + "\n\n" + "\n".join(f"{ts(t['start'])} {t['title']}" + (f" ({t['title_en']})" if t['title_en'] else "") for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n\n" + hashtags + "\n"
