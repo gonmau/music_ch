@@ -181,7 +181,27 @@ def draw_lp(w, rec, size, cx, cy, ang_deg, geom, theta, lift, alpha, dy):
     hx, hy = tip; d.ellipse([hx - 10, hy - 10, hx + 10, hy + 10], fill=(150, 146, 142, 255))
     if alpha < 1: layer.putalpha(layer.getchannel("A").point(lambda v: int(v * alpha)))
     w.alpha_composite(layer)
-def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, t0=None, t1=None):
+D0, D1, LIFT = .4, 1.1, 2.8        # 바늘 내리기 시작/착지(판이 나타난 뒤 초), 곡이 끝나기 전 바늘 올리는 시점
+def needle_sfx(audio, out, tracks, S, B, total, vol=1.0):
+    """바늘 착지(툭 + 지지직 번지는 소리)와 바늘 올림(작은 툭)을 합성해 원래 소리 위에 얹은 wav 를 만든다."""
+    SR = 48000; raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", audio, "-f", "f32le", "-ac", "2", "-ar", str(SR), "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, np.float32).reshape(-1, 2).copy(); rnd = np.random.RandomState(5)
+    def add(t, sig, pad=0):
+        i = int(t * SR)
+        if i < 0 or i >= len(x): return
+        sig = sig[:len(x) - i]; x[i:i + len(sig)] += (sig * vol)[:, None]
+    def thump(dur, f, amp):
+        t = np.arange(int(SR * dur)) / SR; return amp * np.sin(2 * np.pi * f * t * (1 - .3 * t / dur)) * np.exp(-t / (dur / 4))
+    def crackle(dur, amp):
+        n = int(SR * dur); env = np.exp(-np.arange(n) / SR / (dur / 2.5)); sig = np.zeros(n)
+        for i in np.flatnonzero(rnd.rand(n) < 90 / SR * (1 + 3 * env)): sig[i] = rnd.randn() * amp * (.3 + rnd.rand())
+        return np.convolve(sig, np.hanning(5), "same") + rnd.randn(n) * amp * .05 * env
+    for j in range(len(tracks)):
+        a0 = (S[j] - 0.5 if j else 0.0); land = a0 + D1; lift = B[j] - LIFT
+        c = crackle(1.4, .09); c[:12000] += thump(.25, 90, .16); add(land, c); add(land - .04, rnd.randn(int(SR * .02)) * .12)
+        if j < len(tracks) - 1: c = crackle(.35, .05); c[:5760] += thump(.12, 120, .07); add(lift, c); add(lift + 1.1, thump(.15, 80, .08))
+    sf_mod = __import__("soundfile"); sf_mod.write(out, np.clip(x, -1, 1), SR)
+def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, t0=None, t1=None, sfx=True):
     """LP 한 가지만: 곡 시작에 바늘이 내려와 홈을 따라 안쪽으로 읽어 가고, 곡이 끝나면 바늘이 올라가 제자리로 돌아간 뒤 다음 판(라벨 색·번호 다름)이 올라온다."""
     sr = 16000; a16 = load_audio(audio, sr); gr = grains(); size = 400; cx, cy = 250, CH * .5; geom = _arm_geom(size, cx, cy); th_out, th_in = geom[2], geom[3]; th_rest = th_out + .5
     scenes, recs = [], []
@@ -189,6 +209,7 @@ def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, 
         mid = os.path.join(base_dir, t["midi"]); notes = []
         scenes.append(Scene("lp", notes, t["title"], 7 * 100 + t["i"], t["dur"], "bl", os.path.join(base_dir, t["bg"]) if t.get("bg") else None)); recs.append(make_record(size, LABELS[(t["i"] - 1) % len(LABELS)], f"{t['i']:02d}"))
     total = len(a16) / sr; n = len(tracks); S = [0.5] + [tracks[i]["start"] + xfade / 2 for i in range(1, n)]; B = S[1:] + [total + 3]; bounds = B[:-1] + [1e9]
+    if sfx: mixed = out + ".sfx.wav"; needle_sfx(audio, mixed, tracks, S, B, total); audio = mixed
     t0 = 0 if t0 is None else t0; t1 = total if t1 is None else min(t1, total); p = encoder(audio, out, t0, t1 - t0, w, h) if (t0 or t1 < total) else encoder(audio, out, w=w, h=h); ang = [0.0] * n
     for k in range(int(t0 * FPS), int(t1 * FPS)):
         T = k / FPS; g = gr[k % 6]
@@ -197,13 +218,13 @@ def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, 
         f = Image.blend(base(near), base(near + 1), (T - bounds[near] + blend / 2) / blend) if near is not None else base(next(j for j, bb in enumerate(bounds) if T < bb))
         wd = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); fr = f.convert("RGBA"); d = ImageDraw.Draw(fr, "RGBA")
         for j in range(n):
-            a0 = S[j] - 0.5 if j else 0.0; e0 = B[j] - 2.2; vis_in = _ease((T - a0) / 1.2); vis_out = _ease((T - (B[j] - .5)) / 1.2) if j < n - 1 else 0
+            a0 = S[j] - 0.5 if j else 0.0; e0 = B[j] - LIFT; vis_in = _ease((T - a0) / .8); vis_out = _ease((T - (B[j] - .5)) / 1.2) if j < n - 1 else 0
             alpha = vis_in * (1 - vis_out)
             if alpha <= 0: continue
             spd = _ease((T - a0) / 1.6) * (1 - .75 * _ease((T - (B[j] - 2.0)) / 1.5)); ang[j] = ang[j] + spd / FPS * 360 * .555
-            if T < a0 + 1.0: th, lift = th_rest, 1.0
-            elif T < a0 + 2.0: e = _ease((T - a0 - 1.0) / 1.0); th = th_rest + (th_out - th_rest) * e; lift = 1 - _ease((T - a0 - 1.5) / .5)
-            elif T < e0: th, lift = th_out + (th_in - th_out) * (T - a0 - 2.0) / max(1, e0 - a0 - 2.0), 0.0
+            if T < a0 + D0: th, lift = th_rest, 1.0
+            elif T < a0 + D1: e = _ease((T - a0 - D0) / (D1 - D0)); th = th_rest + (th_out - th_rest) * e; lift = 1 - _ease((T - a0 - D1 + .3) / .3)
+            elif T < e0: th, lift = th_out + (th_in - th_out) * (T - a0 - D1) / max(1, e0 - a0 - D1), 0.0
             else: x = T - e0; th = th_in + (th_rest - th_in) * _ease((x - .4) / .8); lift = _ease(x / .4)
             draw_lp(wd, recs[j], size, cx, cy, ang[j], geom, th, lift, alpha, (1 - vis_in) * 70 + vis_out * 70)
             ta = int(235 * _ease((T - (S[j] + .3)) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7))) if j else int(235 * _ease((T - 1.0) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7)))
@@ -211,7 +232,11 @@ def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, 
         wd = wd.resize((CW // WS, CH // WS), Image.LANCZOS); fr.alpha_composite(wd, (MARGIN, H - MARGIN - wd.height))
         p.stdin.write(np.asarray(fr.convert("RGB")).tobytes())
         if k % (FPS * 300) == 0: print(f"  {T / 60:.0f}/{total / 60:.0f}분", flush=True)
-    p.stdin.close(); p.wait(); print("완료:", out)
+    p.stdin.close(); p.wait()
+    if sfx:
+        try: os.remove(mixed)
+        except OSError: pass
+    print("완료:", out)
 
 def render_preview(style, midi, audio, start, dur, title, out):
     notes = [n for i in pm.PrettyMIDI(midi).instruments for n in i.notes]; a16 = load_audio(audio); gr = grains(); sc = Scene(style, notes, title, 3, dur); p = encoder(audio, out, start, dur)
@@ -220,12 +245,12 @@ def render_preview(style, midi, audio, start, dur, title, out):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("mode", choices=["album", "preview"]); ap.add_argument("--audio", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="bl", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H); ap.add_argument("--lp", action="store_true", help="LP 한 가지 스타일만 (바늘 내려오기/곡 바뀔 때 판 교체)"); ap.add_argument("--t0", type=float, default=None); ap.add_argument("--t1", type=float, default=None)
+    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="bl", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H); ap.add_argument("--lp", action="store_true", help="LP 한 가지 스타일만 (바늘 내려오기/곡 바뀔 때 판 교체)"); ap.add_argument("--no-sfx", action="store_true", help="LP 바늘 효과음 끄기"); ap.add_argument("--t0", type=float, default=None); ap.add_argument("--t1", type=float, default=None)
     ap.add_argument("--style", default="keys", choices=STYLES); ap.add_argument("--midi", default=""); ap.add_argument("--start", type=float, default=0); ap.add_argument("--dur", type=float, default=20); ap.add_argument("--title", default="밤 열한 시의 피아노")
     a = ap.parse_args()
     if a.mode == "album":
         tr = json.load(open(a.tracks, encoding="utf-8"))
-        if a.lp: render_lp(a.audio, tr, a.out, os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, t0=a.t0, t1=a.t1); raise SystemExit
+        if a.lp: render_lp(a.audio, tr, a.out, os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, t0=a.t0, t1=a.t1, sfx=not a.no_sfx); raise SystemExit
         render_album(a.audio, tr, a.out, a.seed, a.styles.split(","), os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, corners=a.corner)
         json.dump(tr, open(a.out + ".styles.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     else:
