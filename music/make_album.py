@@ -21,7 +21,10 @@ ENERGY = {"ballad90": 0, "minor80": -4, "citypop80": 10, "newage": -8}      # �
 INTRO = {"ballad90": "90년대 라디오에서 흘러나오던 서정 발라드 감성", "minor80": "80년대 단조 발라드 특유의 쓸쓸하고 깊은 여운", "citypop80": "80년대 시티팝의 도시적이고 가벼운 스윙감", "newage": "맑고 잔잔하게 흐르는 서정 피아노"}
 HEAD = {"ballad90": ("밤, 혼자 듣는", "90년대 피아노 발라드"), "minor80": ("비 오는 밤에 듣는", "80년대 피아노 발라드"), "citypop80": ("퇴근길 드라이브", "80년대 시티팝 피아노"), "newage": ("고요한 밤의", "서정 피아노 연주곡")}
 MIXED = ("밤, 혼자 듣는", "80~90년대 피아노 발라드")
-TAGS = ["80년대", "90년대", "추억의 발라드", "피아노 발라드", "피아노 연주곡", "레트로", "올드팝", "LP", "카세트", "노스탤지어", "80s", "90s", "piano ballad", "retro", "instrumental"]
+HEAD_EN = {"ballad90": "Late Night 90s Piano Ballads", "minor80": "Rainy Night 80s Piano Ballads", "citypop80": "Night Drive 80s City Pop Piano", "newage": "Quiet Night Lyrical Piano"}
+MIXED_EN = "Late Night 80s & 90s Piano Ballads"
+INTRO_EN = {"ballad90": "the lyrical ballads once heard on 90s radio", "minor80": "the lonely, lingering mood of 80s minor-key ballads", "citypop80": "the light, urban swing of 80s city pop", "newage": "gently flowing lyrical piano"}
+TAGS = ["80년대", "90년대", "추억의 발라드", "피아노 발라드", "피아노 연주곡", "레트로", "올드팝", "LP", "카세트", "노스탤지어", "80s", "90s", "piano ballad", "retro", "instrumental", "80s ballad", "90s ballad", "korean ballad", "nostalgic piano", "vinyl", "1980s music", "1990s music"]
 MINOR = {"minor80"}
 BPM = {"ballad90": (60, 72), "minor80": (58, 68), "citypop80": (72, 82), "newage": (52, 62)}
 KEYS = [55, 57, 58, 60, 62, 64, 65]     # 낮은 옥타브 기준 근음(Retro가 66 이상은 한 옥타브 내림)
@@ -94,10 +97,14 @@ def main():
     tags = list(TAGS)
     if "citypop80" in cnt: tags += ["시티팝", "city pop"]
     hashtags = "#80년대 #90년대 #피아노발라드 #BSideNight"
-    desc = intro + "\n\n" + "\n".join(f"{ts(t['start'])} {t['title']}" for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n\n" + hashtags + "\n"
+    head_en = HEAD_EN[dom] if n_dom / len(tracks) >= .6 else MIXED_EN
+    intro_en = (f"{head_en}. Instrumental, no vocals. {mins} min.\nStarts quietly and slowly deepens. This album blends {INTRO_EN[ms[0]]}" + (f" with {INTRO_EN[ms[1]]}." if len(ms) > 1 else "."))
+    tl = "\n".join(f"{ts(t['start'])} {t['title']}" for t in tracks); credit = "Piano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\nSynthesized music (AI / code-generated)."
+    desc_en = intro_en + "\n\n" + tl + "\n\n" + credit + "\n\n#80s #90s #PianoBallad #BSideNight\n"
+    desc = intro + "\n\n" + intro_en + "\n\n" + "\n".join(f"{ts(t['start'])} {t['title']}" for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n\n" + hashtags + "\n"
     open(a.out + "_description.txt", "w", encoding="utf-8").write(desc)
-    title = f"{line1} {line2} | Vol.{a.vol} | B-Side Night"
-    json.dump(dict(title=title, line1=line1, line2=line2, tags=tags, vol=a.vol, minutes=mins), open(a.out + "_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    title = f"{line1} {line2} ({head_en}) | Vol.{a.vol} | B-Side Night"; title_en = f"{head_en} | Vol.{a.vol} | B-Side Night"
+    json.dump(dict(title=title, title_en=title_en, desc_en=desc_en, line1_en=head_en, line1=line1, line2=line2, tags=tags, vol=a.vol, minutes=mins), open(a.out + "_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print("제목:", title)
     print(f"완료: {len(tracks)}곡 약 {pos / 60:.1f}분 -> {a.out}.mp3")
 if __name__ == "__main__":

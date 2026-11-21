@@ -97,6 +97,7 @@ jobs:
         run: |
           N="out/vol$(printf %02d $VOL)"
           python thumbnail.py --tracks "${N}_tracks.json" --vol "$VOL" --minutes "${{ github.event.inputs.minutes }}" --out "${N}_thumb.jpg"
+          python thumbnail.py --tracks "${N}_tracks.json" --vol "$VOL" --minutes "${{ github.event.inputs.minutes }}" --lang en --out "${N}_thumb_en.jpg"
       - name: 유튜브 업로드
         if: ${{ github.event.inputs.upload == 'true' }}
         working-directory: music
@@ -110,6 +111,7 @@ jobs:
           path: |
             music/out/vol*.mp4
             music/out/vol*_thumb.jpg
+            music/out/vol*_thumb_en.jpg
             music/out/vol*_description.txt
             music/out/vol*_tracks.json
             music/out/vol*_meta.json

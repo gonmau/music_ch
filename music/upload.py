@@ -17,12 +17,13 @@ def main():
     meta = json.load(open(a.meta, encoding="utf-8")) if a.meta and os.path.exists(a.meta) else {}
     title = (a.title or meta.get("title") or "B-Side Night"); tags = meta.get("tags") or TAGS
     desc = open(a.desc, encoding="utf-8").read(); yt = youtube()
-    body = {"snippet": {"title": title[:100], "description": desc[:4900], "categoryId": "10", "tags": tags},
+    body = {"snippet": {"title": title[:100], "description": desc[:4900], "categoryId": "10", "tags": tags, "defaultLanguage": "ko", "defaultAudioLanguage": "zxx" if False else "ko"},
             "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": True}}
     if a.publish_at.strip():
         kst = datetime.strptime(a.publish_at.strip(), "%Y-%m-%d %H:%M").replace(tzinfo=timezone(timedelta(hours=9))); body["status"]["publishAt"] = kst.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    if meta.get("title_en"): body["localizations"] = {"en": {"title": meta["title_en"][:100], "description": meta.get("desc_en", "")[:4900]}}   # 영어권 시청자에게는 영문 제목·설명이 보임
     def ins(b):
-        req = yt.videos().insert(part="snippet,status", body=b, media_body=MediaFileUpload(a.video, mimetype="video/mp4", resumable=True, chunksize=64 * 1024 * 1024)); res = None
+        req = yt.videos().insert(part="snippet,status,localizations" if b.get("localizations") else "snippet,status", body=b, media_body=MediaFileUpload(a.video, mimetype="video/mp4", resumable=True, chunksize=64 * 1024 * 1024)); res = None
         while res is None:
             st, res = req.next_chunk()
             if st: print(f"  업로드 {int(st.progress() * 100)}%", flush=True)
