@@ -17,7 +17,7 @@ def gen(prompt, session):
     if not b: raise RuntimeError("응답에 이미지 없음")
     return Image.open(io.BytesIO(base64.b64decode(b))).convert("RGB")
 def to_wide(im, w=1280, h=720):      # 정사각 결과를 16:9 로 자르고 크기를 맞춘다 (배경이라 약간 흐려도 무방)
-    W0, H0 = im.size; ch = int(W0 * h / w); top = int((H0 - ch) * .55); return im.crop((0, top, W0, top + ch)).resize((w, h), Image.LANCZOS)
+    W0, H0 = im.size; ch = int(W0 * h / w); top = int((H0 - ch) * .55); return im.crop((0, top, W0, top + ch))    # 원본 해상도를 그대로 둠 (화면 크기에 맞추는 건 영상 만들 때)
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--force", action="store_true"); ap.add_argument("--seed", type=int, default=1); a = ap.parse_args()
     if not (os.environ.get("CF_ACCOUNT_ID") and os.environ.get("CF_API_TOKEN")):

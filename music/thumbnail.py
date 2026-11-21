@@ -14,7 +14,7 @@ def make(tracks_path, vol, minutes, out, line1, line2, lang="ko"):
     if lang == "en": line1, line2 = (en.rsplit(" ", 2)[0], " ".join(en.split()[-2:])) if en else ("Late Night", "Piano Ballads")
     line1, line2 = line1 or "밤, 혼자 듣는", line2 or "80~90년대 피아노 발라드"
     tr = json.load(open(tracks_path, encoding="utf-8")); base = os.path.dirname(os.path.abspath(tracks_path)); bgp = next((os.path.join(base, t["bg"]) for t in tr if t.get("bg") and os.path.exists(os.path.join(base, t["bg"]))), None)
-    a = V.load_bg(bgp) if bgp else V.background(vol * 7 + 1); a = np.clip(a * 1.25, 0, 255)          # 썸네일은 배경을 조금 더 밝게
+    a = V.load_bg(bgp) if bgp else V.background(vol * 7 + 1); a = np.asarray(Image.fromarray(np.clip(a, 0, 255).astype("uint8")).resize((W, H), Image.LANCZOS)).astype("float32"); a = np.clip(a * 1.25, 0, 255)          # 썸네일은 배경을 조금 더 밝게
     g = np.linspace(1, .25, W)[None, :, None]; a = a * (.55 + .45 * g)                               # 왼쪽(글자 쪽)을 더 어둡게
     im = Image.fromarray(a.astype("uint8")).convert("RGBA"); d = ImageDraw.Draw(im, "RGBA")
     rec = V.make_record(440); sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); ImageDraw.Draw(sh).ellipse([W - 520, H - 410, W - 60, H - 30], fill=(0, 0, 0, 140)); im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(18)))

@@ -10,7 +10,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import pretty_midi as pm
 
-W, H, FPS = 1280, 720, 24
+_S = float(os.environ.get("VIDEO_H", "1080")) / 720                 # 화면 높이(기본 1080p). 720 으로 줄이려면 환경변수 VIDEO_H=720
+W, H, FPS = int(1280 * _S), int(720 * _S), 24
 FONT = str(Path(__file__).parent / "fonts" / "NanumMyeongjo-ExtraBold.ttf")
 AMBER = (255, 196, 120)
 STYLES = ["keys", "lp", "both", "cassette", "spectrum"]
@@ -27,7 +28,7 @@ def background(seed):
 
 def load_bg(path):
     """AI 배경 이미지를 1280x720으로 맞추고 어둡고 따뜻하게, 가장자리를 어둡게 (비주얼과 글자가 잘 보이도록)"""
-    im = Image.open(path).convert("RGB").filter(ImageFilter.GaussianBlur(3)); w, h = im.size   # 약한 블러: 혹시 생긴 글자를 읽을 수 없게 + 아날로그 느낌
+    im = Image.open(path).convert("RGB").filter(ImageFilter.GaussianBlur(1.6)); w, h = im.size   # 약한 블러: 혹시 생긴 글자를 읽을 수 없게 + 아날로그 느낌
     r = max(W / w, H / h); im = im.resize((int(w * r) + 1, int(h * r) + 1), Image.LANCZOS)
     ox, oy = (im.width - W) // 2, (im.height - H) // 2; a = np.asarray(im.crop((ox, oy, ox + W, oy + H))).astype("float32") * .62
     a *= np.array([1.04, 1.0, .93]); yy, xx = np.ogrid[:H, :W]
@@ -100,7 +101,7 @@ def draw_spectrum(fr, bars):
         d.rounded_rectangle([x + 2, yb + 6, x + bw - 2, yb + 6 + h * .22], 3, fill=AMBER + (40,))      # 바닥 반사
 
 CW, CH, WS = 800, 460, 2          # 위젯 캔버스(2배 크기로 그린 뒤 줄여 선명하게) -> 실제 400x230
-MARGIN = 48
+MARGIN = int(48 * _S)
 
 class Scene:
     def __init__(self, style, notes, title, seed, dur, corner="br", bg_path=None):
@@ -114,7 +115,7 @@ class Scene:
         elif s == "both": draw_record(w, self.rec, 280, CW - 190 if R else 190, CH * .32, tl); draw_keys(w, self.pos, 110, tl, self.notes, CH - 140)
         elif s == "cassette": draw_cassette(w, CW - 255 if R else 255, CH / 2, tl, min(1, tl / max(1, self.dur)), self.title)
         elif s == "spectrum": self.bars = spectrum_bars(audio, sr, t_abs, self.bars); draw_spectrum(w, self.bars)
-        return w.resize((CW // WS, CH // WS), Image.LANCZOS)
+        return w.resize((int(CW // WS * _S), int(CH // WS * _S)), Image.LANCZOS)
     def base(self, tl, grain):
         z = 1 + .03 * min(1, tl / max(1, self.dur)); a = self.bg
         if z > 1:
@@ -125,7 +126,7 @@ class Scene:
         right = self.corner == "br"; wx = W - MARGIN - wd.width if right else MARGIN; wy = H - MARGIN - wd.height
         d = ImageDraw.Draw(fr, "RGBA")       # 제목은 좌상단에 작게 (우하단은 유튜브 워터마크 자리)
         sh = Image.new("RGBA", wd.size, (0, 0, 0, 0)); fr.alpha_composite(wd, (int(wx), int(wy)))
-        d.text((MARGIN, MARGIN + 30), self.title, font=F(26), fill=(250, 236, 214, 235), anchor="ls")
+        d.text((MARGIN, MARGIN + int(30 * _S)), self.title, font=F(26 * _S), fill=(250, 236, 214, 235), anchor="ls")
         return fr
 
 def load_audio(path, sr=16000):
@@ -135,7 +136,7 @@ def load_audio(path, sr=16000):
 def encoder(audio, out, start=None, dur=None, w=W, h=H):
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-"]
     if start is not None: cmd += ["-ss", str(start), "-t", str(dur)]
-    cmd += ["-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"]
+    cmd += ["-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"]
     if dur: cmd += ["-t", str(dur)]
     if (w, h) != (W, H): cmd[cmd.index("-c:v"):cmd.index("-c:v")] = ["-vf", f"scale={w}:{h}"]
     return subprocess.Popen(cmd + [out], stdin=subprocess.PIPE)
@@ -221,8 +222,8 @@ def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, 
         draw_lp(wd, rec, size, cx, cy, ang, geom, th, lift, alpha, (1 - alpha) * 70)
         for j in range(n):          # 곡 제목: 이전 제목이 사라진 뒤 새 제목이 나타남
             ta = int(235 * _ease((T - (S[j] + (.3 if j else 1.0))) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7) if j < n - 1 else 1))
-            if ta > 0: d.text((MARGIN, MARGIN + 30), tracks[j]["title"], font=F(26), fill=(250, 236, 214, ta), anchor="ls")
-        wd = wd.resize((CW // WS, CH // WS), Image.LANCZOS); fr.alpha_composite(wd, (MARGIN, H - MARGIN - wd.height))
+            if ta > 0: d.text((MARGIN, MARGIN + int(30 * _S)), tracks[j]["title"], font=F(26 * _S), fill=(250, 236, 214, ta), anchor="ls")
+        wd = wd.resize((int(CW // WS * _S), int(CH // WS * _S)), Image.LANCZOS); fr.alpha_composite(wd, (MARGIN, H - MARGIN - wd.height))
         p.stdin.write(np.asarray(fr.convert("RGB")).tobytes())
         if k % (FPS * 300) == 0: print(f"  {T / 60:.0f}/{total / 60:.0f}분", flush=True)
     p.stdin.close(); p.wait()
