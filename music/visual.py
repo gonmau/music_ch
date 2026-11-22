@@ -202,7 +202,7 @@ def needle_sfx(audio, out, bounds, total, vol=1.0):
     for b in bounds: add(b - 1.5, crackle(3.0, .022, lambda n: np.sin(np.linspace(0, np.pi, n)) ** 2))                   # 곡 사이 홈 구간(살짝 지직)
     c = crackle(.4, .02, lambda n: np.exp(-np.arange(n) / SR / .15)); c[:4800] += thump(.1, 110, .03); add(total - END, c)  # 마지막에 바늘 올림
     __import__("soundfile").write(out, np.clip(x, -1, 1), SR)
-def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, t0=None, t1=None, sfx=True):
+def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, t0=None, t1=None, sfx=True, caps=False):
     """LP 한 장이 앨범 내내 계속 돈다: 처음에 판이 올라오고 바늘이 내려앉은 뒤, 바늘은 홈을 따라 천천히 안쪽으로 이동. 곡이 바뀔 땐 제목만 바뀌고(홈 사이를 지나는 은은한 지직임) 마지막에 바늘이 올라간다."""
     sr = 16000; a16 = load_audio(audio, sr); gr = grains(); size = 400; cx, cy = 250, CH * .5; geom = _arm_geom(size, cx, cy); th_out, th_in = geom[2], geom[3]; th_rest = th_out + .5
     scenes = [Scene("lp", [], t["title"], 700 + t["i"], t["dur"], "bl", os.path.join(base_dir, t["bg"]) if t.get("bg") else None) for t in tracks]; rec = make_record(size); n = len(tracks)
@@ -225,6 +225,12 @@ def render_lp(audio, tracks, out, base_dir=".", w=W, h=H, xfade=6.0, blend=1.5, 
             ta = int(235 * _ease((T - (S[j] + (.3 if j else 1.0))) / 1.0) * (1 - _ease((T - (B[j] - 1.6)) / .7) if j < n - 1 else 1))
             if ta > 0: d.text((MARGIN, MARGIN + int(30 * _S)), tracks[j]["title"], font=F(26 * _S), fill=(250, 236, 214, ta), anchor="ls")
             if ta > 0 and tracks[j].get("title_en"): d.text((MARGIN, MARGIN + int(58 * _S)), tracks[j]["title_en"], font=F(17 * _S), fill=(235, 220, 196, int(ta * .85)), anchor="ls")
+        if caps:            # 곡 시작 3초 뒤 7초간 한 줄 서사(천천히 나타났다 사라짐)
+            for j in range(n):
+                c0 = S[j] + (4.0 if not j else 3.5); ca = int(200 * _ease((T - c0) / 1.5) * (1 - _ease((T - (c0 + 5.5)) / 1.5)))
+                if ca > 0 and tracks[j].get("cap"):
+                    d.text((MARGIN, MARGIN + int(92 * _S)), tracks[j]["cap"], font=F(20 * _S), fill=(240, 226, 204, ca), anchor="ls")
+                    if tracks[j].get("cap_en"): d.text((MARGIN, MARGIN + int(118 * _S)), tracks[j]["cap_en"], font=F(14 * _S), fill=(225, 210, 188, int(ca * .8)), anchor="ls")
         wd = wd.resize((int(CW // WS * _S), int(CH // WS * _S)), Image.LANCZOS); fr.alpha_composite(wd, (MARGIN, H - MARGIN - wd.height))
         p.stdin.write(np.asarray(fr.convert("RGB")).tobytes())
         if k % (FPS * 300) == 0: print(f"  {T / 60:.0f}/{total / 60:.0f}분", flush=True)
@@ -241,12 +247,12 @@ def render_preview(style, midi, audio, start, dur, title, out):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("mode", choices=["album", "preview"]); ap.add_argument("--audio", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="bl", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H); ap.add_argument("--lp", action="store_true", help="LP 한 가지 스타일만 (바늘 내려오기/곡 바뀔 때 판 교체)"); ap.add_argument("--no-sfx", action="store_true", help="LP 바늘 효과음 끄기"); ap.add_argument("--t0", type=float, default=None); ap.add_argument("--t1", type=float, default=None)
+    ap.add_argument("--tracks", default=""); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--styles", default=",".join(STYLES)); ap.add_argument("--corner", default="bl", choices=["br", "bl", "random"], help="비주얼 위치: 우하단/좌하단/곡마다 랜덤"); ap.add_argument("--w", type=int, default=W); ap.add_argument("--h", type=int, default=H); ap.add_argument("--lp", action="store_true", help="LP 한 가지 스타일만 (바늘 내려오기/곡 바뀔 때 판 교체)"); ap.add_argument("--captions", action="store_true", help="LP 영상에 곡마다 한 줄 서사 표시"); ap.add_argument("--no-sfx", action="store_true", help="LP 바늘 효과음 끄기"); ap.add_argument("--t0", type=float, default=None); ap.add_argument("--t1", type=float, default=None)
     ap.add_argument("--style", default="keys", choices=STYLES); ap.add_argument("--midi", default=""); ap.add_argument("--start", type=float, default=0); ap.add_argument("--dur", type=float, default=20); ap.add_argument("--title", default="밤 열한 시의 피아노")
     a = ap.parse_args()
     if a.mode == "album":
         tr = json.load(open(a.tracks, encoding="utf-8"))
-        if a.lp: render_lp(a.audio, tr, a.out, os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, t0=a.t0, t1=a.t1, sfx=not a.no_sfx); raise SystemExit
+        if a.lp: render_lp(a.audio, tr, a.out, os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, t0=a.t0, t1=a.t1, sfx=not a.no_sfx, caps=a.captions); raise SystemExit
         render_album(a.audio, tr, a.out, a.seed, a.styles.split(","), os.path.dirname(os.path.abspath(a.tracks)), a.w, a.h, corners=a.corner)
         json.dump(tr, open(a.out + ".styles.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     else:

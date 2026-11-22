@@ -14,6 +14,10 @@ on:
       moods:
         description: "곡 분위기 (쉼표): ballad90, minor80, citypop80, newage"
         default: "ballad90,minor80,citypop80"
+      captions:
+        description: "영상 속에 곡마다 한 줄 서사 표시 (설명란에는 항상 들어감)"
+        type: boolean
+        default: false
       theme:
         description: "밤의 서사 (고르면 곡 분위기·배경·제목·소개문이 그 테마로 정해지고 moods는 무시됨)"
         type: choice
@@ -96,7 +100,7 @@ jobs:
         working-directory: music
         run: |
           N="out/vol$(printf %02d $VOL)"
-          python visual.py album --audio "$N.mp3" --tracks "${N}_tracks.json" --out "$N.mp4" --lp --seed "$VOL" --corner "${{ github.event.inputs.corner }}"
+          python visual.py album --audio "$N.mp3" --tracks "${N}_tracks.json" --out "$N.mp4" --lp $([ "${{ github.event.inputs.captions }}" = "true" ] && echo --captions) --seed "$VOL" --corner "${{ github.event.inputs.corner }}"
       - name: 썸네일
         working-directory: music
         run: |
