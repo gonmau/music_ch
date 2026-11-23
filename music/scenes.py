@@ -199,3 +199,14 @@ for _k, _v in _RAW:
         for _ko, _en in _ts: EN[_ko] = _en
         _sc.append((_p, [k for k, _ in _ts]))
     _v["scenes"] = _sc; THEMES[_k] = _v
+
+# 테마 장면별 추가 제목 (제목 중복·번호 방지) — titles_extra.py
+try:
+    from titles_extra import X as _X
+    for _pool in list(SCENES.values()) + [_t["scenes"] for _t in THEMES.values()]:
+        for _p, _ts in _pool:
+            for _ko, _en in _X.get(_ts[0], []):
+                if _ko not in _ts: _ts.append(_ko)
+                EN.setdefault(_ko, _en)
+except Exception as _e:
+    print("[scenes] titles_extra 불러오기 실패:", _e)
