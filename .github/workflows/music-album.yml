@@ -44,6 +44,9 @@ on:
       publish_at:
         description: "예약 공개 시각, 한국시간 (예: 2026-11-26 20:00). 비우면 비공개로만"
         default: ""
+      shorts:
+        description: "앨범에서 세로 쇼츠(약 45초) 잘라 만들기 - 개수 (0이면 안 만듦). 업로드를 켜면 쇼츠도 비공개로 올라가고 설명에 롱폼 링크가 들어감"
+        default: "3"
       title_extra:
         description: "제목 뒤에 붙일 말 (선택)"
         default: ""
@@ -113,6 +116,22 @@ jobs:
         run: |
           N="out/vol$(printf %02d $VOL)"
           python upload.py --video "$N.mp4" --thumb "${N}_thumb.jpg" --meta "${N}_meta.json" --desc "${N}_description.txt" --publish-at "${{ github.event.inputs.publish_at }}"
+      - name: 쇼츠 만들기 (앨범에서 세로 클립)
+        if: ${{ github.event.inputs.shorts != '0' && github.event.inputs.shorts != '' }}
+        working-directory: music
+        run: |
+          N="out/vol$(printf %02d $VOL)"
+          LONG=""; [ -f uploaded.txt ] && LONG="https://youtu.be/$(cat uploaded.txt)"
+          python shorts_clip.py --video "$N.mp4" --tracks "${N}_tracks.json" --vol "$VOL" --n "${{ github.event.inputs.shorts }}" --long-url "$LONG"
+      - name: 쇼츠 업로드 (비공개)
+        if: ${{ github.event.inputs.upload == 'true' && github.event.inputs.shorts != '0' && github.event.inputs.shorts != '' }}
+        working-directory: music
+        run: |
+          N="out/vol$(printf %02d $VOL)"
+          for f in ${N}_short*.txt; do
+            V="${f%.txt}.mp4"; T="$(head -1 "$f")"; tail -n +2 "$f" > "${f%.txt}.desc"
+            python upload.py --video "$V" --title "$T" --desc "${f%.txt}.desc" || echo "쇼츠 업로드 실패: $V"
+          done
       - name: 결과 보관 (7일)
         uses: actions/upload-artifact@v4
         with:
@@ -124,6 +143,8 @@ jobs:
             music/out/vol*_description.txt
             music/out/vol*_tracks.json
             music/out/vol*_meta.json
+            music/out/vol*_short*.mp4
+            music/out/vol*_short*.txt
           retention-days: 7
       - name: 디스코드 알림
         if: ${{ always() && env.DISCORD_WEBHOOK_URL != '' }}
