@@ -1,0 +1,110 @@
+name: music-shorts
+
+# 쇼츠만 따로: 새 곡을 짧게(기본 10분) 만들어 그중 몇 곡에서 세로 쇼츠(약 45초)를 잘라 낸다. 롱폼 앨범은 만들지 않음.
+# 폰의 GitHub 앱 -> Actions -> music-shorts -> Run workflow. 결과는 Artifacts(7일)와 디스코드, 업로드를 켜면 비공개로 올라감.
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "시드 (숫자. 롱폼 Vol 번호와 겹치지 않게, 같은 숫자면 같은 곡)"
+        default: "91"
+      count:
+        description: "쇼츠 개수"
+        default: "3"
+      minutes:
+        description: "곡 만들 길이(분). 쇼츠 1개당 곡 2~3분 필요 -> 개수 x 3 정도"
+        default: "10"
+      theme:
+        description: "밤의 서사"
+        type: choice
+        options: [none, winter, rainy, happy, anticipation, flutter, hard, tired, blue, fire]
+        default: none
+      moods:
+        description: "곡 분위기 (theme을 고르면 무시)"
+        default: "ballad90,minor80,citypop80"
+      upload:
+        description: "유튜브에 비공개 업로드 (설명의 롱폼 링크는 비움)"
+        type: boolean
+        default: false
+      long_url:
+        description: "설명에 넣을 롱폼 링크 (선택, 예: https://youtu.be/xxxx)"
+        default: ""
+
+concurrency:
+  group: music-album
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  shorts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONUNBUFFERED: "1"
+      SALAMANDER_DIR: ${{ github.workspace }}/salamander/Samples
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      SEED: ${{ github.event.inputs.seed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: ffmpeg 설치
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: pip install -r requirements.txt
+      - name: 피아노 샘플 (Salamander Grand Piano, CC BY 3.0)
+        uses: actions/cache@v4
+        with:
+          path: salamander
+          key: salamander-v3
+      - run: |
+          [ -d salamander/Samples ] || git clone --depth 1 https://github.com/sfzinstruments/SalamanderGrandPiano salamander
+      - name: 곡 만들기
+        working-directory: music
+        run: |
+          mkdir -p out
+          python make_album.py --minutes "${{ github.event.inputs.minutes }}" --out "out/s$SEED" --seed "$SEED" --vol "$SEED" \
+            --texture lp --moods "${{ github.event.inputs.moods }}" $([ "${{ github.event.inputs.theme }}" != "none" ] && [ -n "${{ github.event.inputs.theme }}" ] && echo --theme "${{ github.event.inputs.theme }}")
+      - name: AI 배경 이미지
+        working-directory: music
+        continue-on-error: true
+        run: python ai_bg.py --tracks "out/s${SEED}_tracks.json" --seed "$SEED"
+      - name: 영상 만들기 (가로 원본, 쇼츠로 자르기 전)
+        working-directory: music
+        run: |
+          N="out/s$SEED"
+          python visual.py album --audio "$N.mp3" --tracks "${N}_tracks.json" --out "$N.mp4" --lp --seed "$SEED" --corner bl
+      - name: 쇼츠 만들기
+        working-directory: music
+        run: |
+          N="out/s$SEED"
+          python shorts_clip.py --video "$N.mp4" --tracks "${N}_tracks.json" --vol "$SEED" --n "${{ github.event.inputs.count }}" --long-url "${{ github.event.inputs.long_url }}"
+      - name: 쇼츠 업로드 (비공개)
+        if: ${{ github.event.inputs.upload == 'true' }}
+        working-directory: music
+        run: |
+          N="out/s$SEED"
+          for f in ${N}_short*.txt; do
+            V="${f%.txt}.mp4"; T="$(head -1 "$f")"; tail -n +2 "$f" > "${f%.txt}.desc"
+            python upload.py --video "$V" --title "$T" --desc "${f%.txt}.desc" || echo "쇼츠 업로드 실패: $V"
+          done
+      - name: 결과 보관 (7일)
+        uses: actions/upload-artifact@v4
+        with:
+          name: shorts-${{ github.event.inputs.seed }}
+          path: |
+            music/out/s*_short*.mp4
+            music/out/s*_short*.txt
+          retention-days: 7
+      - name: 디스코드 알림
+        if: ${{ always() && env.DISCORD_WEBHOOK_URL != '' }}
+        run: |
+          curl -sS -H "Content-Type: application/json" -d "{\"content\":\"🎬 music-shorts ${SEED}: ${{ job.status }} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" "$DISCORD_WEBHOOK_URL" >/dev/null || true
