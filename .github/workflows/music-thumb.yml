@@ -1,7 +1,7 @@
 name: music-thumb
 
 # 이미 올린 영상의 썸네일만 새로 만들기 (테마 색을 입힘). 결과는 Artifacts(7일)와 디스코드로 받아 Studio에서 교체.
-# 배경은 곡 AI 그림이 없어서 기본 보케 배경을 씁니다.
+# 한글·영문 두 장이 나옵니다. 배경은 곡 AI 그림이 없어서 기본 보케 배경을 씁니다.
 on:
   workflow_dispatch:
     inputs:
@@ -23,6 +23,10 @@ on:
         description: "둘째 줄 (비우면 80~90년대 피아노 발라드)"
         default: ""
 
+      head_en:
+        description: "영문 문구 (예: Late Night 80s & 90s Piano Ballads / 비우면 테마 기본 영문)"
+        default: ""
+
 permissions:
   contents: read
 
@@ -39,7 +43,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: 썸네일 만들기 (한글·영문)
+      - name: 썸네일 만들기 (한글+영문)
         working-directory: music
         run: |
           mkdir -p out
@@ -47,13 +51,18 @@ jobs:
           [ -z "$L1" ] && L1="$(python -c "import scenes as S;print(S.THEMES['${{ github.event.inputs.theme }}']['line1'])")"
           [ -z "$L2" ] && L2="80~90년대 피아노 발라드"
           N="out/vol$(printf %02d ${{ github.event.inputs.vol }})"
-          python thumbnail.py --vol "${{ github.event.inputs.vol }}" --minutes "${{ github.event.inputs.minutes }}" --theme "${{ github.event.inputs.theme }}" --line1 "$L1" --line2 "$L2" --out "${N}_thumb.jpg"
+          HE="${{ github.event.inputs.head_en }}"
+          [ -z "$HE" ] && HE="$(python -c "import scenes as S;print(S.THEMES['${{ github.event.inputs.theme }}']['head_en'])")"
+          python thumbnail.py --vol "${{ github.event.inputs.vol }}" --minutes "${{ github.event.inputs.minutes }}" --theme "${{ github.event.inputs.theme }}" --line1 "$L1" --line2 "$L2" --head-en "$HE" --out "${N}_thumb.jpg"
+          python thumbnail.py --vol "${{ github.event.inputs.vol }}" --minutes "${{ github.event.inputs.minutes }}" --theme "${{ github.event.inputs.theme }}" --line1 "$L1" --line2 "$L2" --head-en "$HE" --lang en --out "${N}_thumb_en.jpg"
       - uses: actions/upload-artifact@v4
         with:
           name: thumb-vol${{ github.event.inputs.vol }}
-          path: music/out/vol*_thumb.jpg
+          path: |
+            music/out/vol*_thumb.jpg
+            music/out/vol*_thumb_en.jpg
           retention-days: 7
       - name: 디스코드 알림
         if: ${{ always() && env.DISCORD_WEBHOOK_URL != '' }}
         run: |
-          curl -sS -F "payload_json={\"content\":\"🖼 music-thumb Vol.${{ github.event.inputs.vol }}: ${{ job.status }}\"}" -F "file1=@music/out/vol$(printf %02d ${{ github.event.inputs.vol }})_thumb.jpg" "$DISCORD_WEBHOOK_URL" >/dev/null || true
+          curl -sS -F "payload_json={\"content\":\"🖼 music-thumb Vol.${{ github.event.inputs.vol }}: ${{ job.status }}\"}" -F "file1=@music/out/vol$(printf %02d ${{ github.event.inputs.vol }})_thumb.jpg" -F "file2=@music/out/vol$(printf %02d ${{ github.event.inputs.vol }})_thumb_en.jpg" "$DISCORD_WEBHOOK_URL" >/dev/null || true
