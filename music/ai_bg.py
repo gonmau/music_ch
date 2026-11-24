@@ -33,9 +33,10 @@ def pixabay(prompt, rnd, session, tried=()):
 def to_wide(im, w=1280, h=720):      # 정사각 결과를 16:9 로 자르고 크기를 맞춘다 (배경이라 약간 흐려도 무방)
     W0, H0 = im.size; ch = int(W0 * h / w); top = int((H0 - ch) * .55); return im.crop((0, top, W0, top + ch))    # 원본 해상도를 그대로 둠 (화면 크기에 맞추는 건 영상 만들 때)
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--force", action="store_true"); ap.add_argument("--seed", type=int, default=1); a = ap.parse_args()
-    has_cf = bool(os.environ.get("CF_ACCOUNT_ID") and os.environ.get("CF_API_TOKEN"))
-    if not has_cf and not os.environ.get("PIXABAY_API_KEY"):
+    ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--force", action="store_true"); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--source", default="auto", choices=["auto", "ai", "pixabay"], help="auto=AI 먼저(한도 초과면 Pixabay), ai=AI만, pixabay=Pixabay만"); a = ap.parse_args()
+    has_cf = bool(os.environ.get("CF_ACCOUNT_ID") and os.environ.get("CF_API_TOKEN")) and a.source != "pixabay"
+    if a.source == "ai" and not has_cf: sys.exit("AI(Cloudflare) 키가 없습니다. 임시 배경으로 진행합니다.")
+    if not has_cf and a.source != "ai" and not os.environ.get("PIXABAY_API_KEY"):
         sys.exit("Cloudflare 키(CF_ACCOUNT_ID, CF_API_TOKEN)도 Pixabay 키(PIXABAY_API_KEY)도 없습니다. 임시 배경으로 진행합니다.")
     tp = Path(a.tracks); tracks = json.load(open(tp, encoding="utf-8")); rnd = random.Random(a.seed); stem = tp.name.replace("_tracks.json", ""); d = tp.parent / f"{stem}_bg"; d.mkdir(exist_ok=True)
     pools = SCENES; used = {m: 0 for m in SCENES}; s = requests.Session(); made = 0; cf_off = False
@@ -54,7 +55,7 @@ def main():
             if limit: cf_off = True        # 한도 초과면 이 앨범에서는 더 시도하지 않고 Pixabay 로
             else: print(f"  [{t['i']}] Cloudflare 실패({str(e)[:60]})")
         try:
-            got = pixabay(prompt, rnd, s)
+            got = pixabay(prompt, rnd, s) if a.source != "ai" else None
             if got:
                 to_wide(got[0]).save(dest, quality=88); t["bg"] = f"{stem}_bg/{dest.name}"; t["bg_credit"] = got[1]; made += 1; print(f"  [{t['i']}] Pixabay 대체 ({got[1]['q']})")
                 continue

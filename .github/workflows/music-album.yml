@@ -34,9 +34,14 @@ on:
         options: [bl, br, random]
         default: bl
       ai_bg:
-        description: "AI 배경 이미지 만들기 (Cloudflare 키 필요)"
+        description: "곡별 배경 이미지 만들기 (끄면 임시 보케 배경). 출처는 아래 bg_source"
         type: boolean
         default: true
+      bg_source:
+        description: "배경 이미지 출처 (auto=AI 먼저, 한도 초과되면 Pixabay / ai=AI만, 한도 초과 땐 임시 배경 / pixabay=Pixabay 사진만, Cloudflare 한도 안 씀)"
+        type: choice
+        options: [auto, ai, pixabay]
+        default: auto
       upload:
         description: "유튜브에 비공개 업로드"
         type: boolean
@@ -99,7 +104,7 @@ jobs:
         if: ${{ github.event.inputs.ai_bg == 'true' }}
         working-directory: music
         continue-on-error: true
-        run: python ai_bg.py --tracks "out/vol$(printf %02d $VOL)_tracks.json" --seed "$VOL"
+        run: python ai_bg.py --tracks "out/vol$(printf %02d $VOL)_tracks.json" --seed "$VOL" --source "${{ github.event.inputs.bg_source }}"
       - name: 영상 만들기 (곡마다 비주얼 랜덤)
         working-directory: music
         run: |
