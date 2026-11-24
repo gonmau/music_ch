@@ -17,7 +17,7 @@ def make(tracks_path, vol, minutes, out, line1, line2, lang="ko", theme=""):
     else: en = ""
     if lang == "en": line1, line2 = (en.rsplit(" ", 2)[0], " ".join(en.split()[-2:])) if en else ("Late Night", "Piano Ballads")
     line1, line2 = line1 or "밤, 혼자 듣는", line2 or "80~90년대 피아노 발라드"
-    tr = json.load(open(tracks_path, encoding="utf-8")); base = os.path.dirname(os.path.abspath(tracks_path)); bgp = next((os.path.join(base, t["bg"]) for t in tr if t.get("bg") and os.path.exists(os.path.join(base, t["bg"]))), None)
+    tr = json.load(open(tracks_path, encoding="utf-8")) if os.path.exists(tracks_path) else []; base = os.path.dirname(os.path.abspath(tracks_path)); bgp = next((os.path.join(base, t["bg"]) for t in tr if t.get("bg") and os.path.exists(os.path.join(base, t["bg"]))), None)
     a = V.load_bg(bgp) if bgp else V.background(vol * 7 + 1); a = np.asarray(Image.fromarray(np.clip(a, 0, 255).astype("uint8")).resize((W, H), Image.LANCZOS)).astype("float32"); a = np.clip(a * 1.25, 0, 255)
     acc, tint, sat = PAL.get(theme, ((255, 196, 120), (1, 1, 1), 1.0))
     if theme in PAL:
@@ -43,5 +43,5 @@ def make(tracks_path, vol, minutes, out, line1, line2, lang="ko", theme=""):
     if lang == "ko" and en: d.text((72, 250 + 130 + 62), en, font=V.F(34), fill=(235, 224, 205, 215), anchor="ls")      # 한글 썸네일에도 작은 영문 한 줄
     im.convert("RGB").save(out, quality=90); print("썸네일:", out)
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--vol", type=int, default=1); ap.add_argument("--minutes", type=float, default=60); ap.add_argument("--out", required=True)
+    ap = argparse.ArgumentParser(); ap.add_argument("--tracks", default="none.json"); ap.add_argument("--vol", type=int, default=1); ap.add_argument("--minutes", type=float, default=60); ap.add_argument("--out", required=True)
     ap.add_argument("--line1", default=""); ap.add_argument("--line2", default=""); ap.add_argument("--lang", default="ko", choices=["ko", "en"]); ap.add_argument("--theme", default=""); a = ap.parse_args(); make(a.tracks, a.vol, a.minutes, a.out, a.line1, a.line2, a.lang, a.theme)

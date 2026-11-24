@@ -1,0 +1,59 @@
+name: music-thumb
+
+# 이미 올린 영상의 썸네일만 새로 만들기 (테마 색을 입힘). 결과는 Artifacts(7일)와 디스코드로 받아 Studio에서 교체.
+# 배경은 곡 AI 그림이 없어서 기본 보케 배경을 씁니다.
+on:
+  workflow_dispatch:
+    inputs:
+      vol:
+        description: "회차 번호"
+        default: "1"
+      minutes:
+        description: "영상 길이(분, 뱃지에 표시)"
+        default: "60"
+      theme:
+        description: "색 테마 (winter 얼음파랑, rainy 청록, happy 노랑, anticipation 살구, flutter 분홍, hard 붉은갈색, tired 라벤더, blue 파랑, fire 주황)"
+        type: choice
+        options: [winter, rainy, happy, anticipation, flutter, hard, tired, blue, fire]
+        default: blue
+      line1:
+        description: "첫 줄 (예: 우울한 밤에 듣는 / 비우면 테마 기본 문구)"
+        default: ""
+      line2:
+        description: "둘째 줄 (비우면 80~90년대 피아노 발라드)"
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  thumb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 썸네일 만들기 (한글·영문)
+        working-directory: music
+        run: |
+          mkdir -p out
+          L1="${{ github.event.inputs.line1 }}"; L2="${{ github.event.inputs.line2 }}"
+          [ -z "$L1" ] && L1="$(python -c "import scenes as S;print(S.THEMES['${{ github.event.inputs.theme }}']['line1'])")"
+          [ -z "$L2" ] && L2="80~90년대 피아노 발라드"
+          N="out/vol$(printf %02d ${{ github.event.inputs.vol }})"
+          python thumbnail.py --vol "${{ github.event.inputs.vol }}" --minutes "${{ github.event.inputs.minutes }}" --theme "${{ github.event.inputs.theme }}" --line1 "$L1" --line2 "$L2" --out "${N}_thumb.jpg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thumb-vol${{ github.event.inputs.vol }}
+          path: music/out/vol*_thumb.jpg
+          retention-days: 7
+      - name: 디스코드 알림
+        if: ${{ always() && env.DISCORD_WEBHOOK_URL != '' }}
+        run: |
+          curl -sS -F "payload_json={\"content\":\"🖼 music-thumb Vol.${{ github.event.inputs.vol }}: ${{ job.status }}\"}" -F "file1=@music/out/vol$(printf %02d ${{ github.event.inputs.vol }})_thumb.jpg" "$DISCORD_WEBHOOK_URL" >/dev/null || true
