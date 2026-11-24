@@ -38,10 +38,10 @@ on:
         type: boolean
         default: true
       bg_source:
-        description: "배경 이미지 출처 (auto=AI 먼저, 한도 초과되면 Pixabay / ai=AI만, 한도 초과 땐 임시 배경 / pixabay=Pixabay 사진만, Cloudflare 한도 안 씀)"
+        description: "배경 이미지 출처 (ai=Cloudflare AI 그림. 한도 초과되면 디스코드 알림 후 전체를 Pixabay 사진으로 다시 받아 통일 / pixabay=처음부터 Pixabay 사진)"
         type: choice
-        options: [auto, ai, pixabay]
-        default: auto
+        options: [ai, pixabay]
+        default: ai
       upload:
         description: "유튜브에 비공개 업로드"
         type: boolean

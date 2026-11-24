@@ -32,37 +32,56 @@ def pixabay(prompt, rnd, session, tried=()):
     return im, {"source": "pixabay", "id": h["id"], "user": h.get("user", ""), "page": h.get("pageURL", ""), "q": q}
 def to_wide(im, w=1280, h=720):      # 정사각 결과를 16:9 로 자르고 크기를 맞춘다 (배경이라 약간 흐려도 무방)
     W0, H0 = im.size; ch = int(W0 * h / w); top = int((H0 - ch) * .55); return im.crop((0, top, W0, top + ch))    # 원본 해상도를 그대로 둠 (화면 크기에 맞추는 건 영상 만들 때)
+def notify(msg):
+    print(msg, flush=True)
+    url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+    if url:
+        try: requests.post(url, json={"content": msg[:1900]}, timeout=15)
+        except Exception: pass
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--force", action="store_true"); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--source", default="auto", choices=["auto", "ai", "pixabay"], help="auto=AI 먼저(한도 초과면 Pixabay), ai=AI만, pixabay=Pixabay만"); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--tracks", required=True); ap.add_argument("--force", action="store_true"); ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--source", default="ai", choices=["ai", "auto", "pixabay"], help="ai=Cloudflare AI (한도 초과되면 알림 후 전체를 Pixabay 로 다시), pixabay=처음부터 Pixabay"); a = ap.parse_args()
     has_cf = bool(os.environ.get("CF_ACCOUNT_ID") and os.environ.get("CF_API_TOKEN")) and a.source != "pixabay"
-    if a.source == "ai" and not has_cf: sys.exit("AI(Cloudflare) 키가 없습니다. 임시 배경으로 진행합니다.")
-    if not has_cf and a.source != "ai" and not os.environ.get("PIXABAY_API_KEY"):
+    has_px = bool(os.environ.get("PIXABAY_API_KEY"))
+    if not has_cf and not has_px:
         sys.exit("Cloudflare 키(CF_ACCOUNT_ID, CF_API_TOKEN)도 Pixabay 키(PIXABAY_API_KEY)도 없습니다. 임시 배경으로 진행합니다.")
     tp = Path(a.tracks); tracks = json.load(open(tp, encoding="utf-8")); rnd = random.Random(a.seed); stem = tp.name.replace("_tracks.json", ""); d = tp.parent / f"{stem}_bg"; d.mkdir(exist_ok=True)
-    pools = SCENES; used = {m: 0 for m in SCENES}; s = requests.Session(); made = 0; cf_off = False
+    pools = SCENES; used = {m: 0 for m in SCENES}; s = requests.Session(); made = 0
+    def prompt_of(t):
+        m = t.get("mood", "ballad90"); pool = pools.get(m) or pools["ballad90"]; pr = t.get("bg_prompt") or pool[used.get(m, 0) % len(pool)][0]; used[m] = used.get(m, 0) + 1; t["bg_prompt"] = pr; return pr
+    def all_pixabay(why):          # 앨범 전체를 Pixabay 사진으로 (통일감을 위해 AI 로 만든 것도 다시 받는다)
+        nonlocal made
+        tried, ok = set(), 0
+        for t in tracks:
+            dest = d / f"t{t['i']:02d}.jpg"; pr = t.get("bg_prompt") or prompt_of(t)
+            try:
+                got = pixabay(pr, rnd, s, tried)
+                if got:
+                    tried.add(got[1]["id"]); to_wide(got[0]).save(dest, quality=88); t["bg"] = f"{stem}_bg/{dest.name}"; t["bg_credit"] = got[1]; ok += 1; continue
+            except Exception as e:
+                print(f"  [{t['i']}] Pixabay 실패({str(e)[:60]})")
+            t.pop("bg", None); t.pop("bg_credit", None)
+            try: dest.unlink()
+            except OSError: pass
+            print(f"  [{t['i']}] 이미지를 못 구해 임시 배경 사용")
+        made += ok; print(f"Pixabay {ok}/{len(tracks)}곡 ({why})")
+    if not has_cf:
+        all_pixabay("Pixabay 선택"); json.dump(tracks, open(tp, "w", encoding="utf-8"), ensure_ascii=False, indent=1); return
     for t in tracks:
-        m = t.get("mood", "ballad90"); pool = pools.get(m) or pools["ballad90"]; prompt = t.get("bg_prompt") or pool[used.get(m, 0) % len(pool)][0]; used[m] = used.get(m, 0) + 1
-        dest = d / f"t{t['i']:02d}.jpg"; t["bg_prompt"] = prompt
+        prompt = prompt_of(t); dest = d / f"t{t['i']:02d}.jpg"
         if dest.exists() and not a.force:
             t["bg"] = f"{stem}_bg/{dest.name}"; continue
-        limit = False
         try:
-            if not has_cf or cf_off: raise RuntimeError("429")
             to_wide(gen(prompt, s)).save(dest, quality=88); t["bg"] = f"{stem}_bg/{dest.name}"; made += 1; print(f"  [{t['i']}] {prompt[:50]}")
-            continue
         except Exception as e:
-            limit = "429" in str(e)
-            if limit: cf_off = True        # 한도 초과면 이 앨범에서는 더 시도하지 않고 Pixabay 로
-            else: print(f"  [{t['i']}] Cloudflare 실패({str(e)[:60]})")
-        try:
-            got = pixabay(prompt, rnd, s) if a.source != "ai" else None
-            if got:
-                to_wide(got[0]).save(dest, quality=88); t["bg"] = f"{stem}_bg/{dest.name}"; t["bg_credit"] = got[1]; made += 1; print(f"  [{t['i']}] Pixabay 대체 ({got[1]['q']})")
-                continue
-        except Exception as e:
-            print(f"  [{t['i']}] Pixabay 실패({str(e)[:60]})")
-        print(f"  [{t['i']}] 이미지를 못 구해 임시 배경 사용")
-        time.sleep(1)
+            if "429" in str(e):
+                if has_px:
+                    notify(f"⚠️ music 배경: Cloudflare 한도 초과(곡 {t['i']}/{len(tracks)}). 통일감을 위해 전체 {len(tracks)}곡을 Pixabay 사진으로 다시 받아 렌더링합니다.")
+                    all_pixabay("Cloudflare 한도 초과")
+                else:
+                    notify(f"⚠️ music 배경: Cloudflare 한도 초과(곡 {t['i']}/{len(tracks)}). PIXABAY_API_KEY가 없어 남은 곡은 임시 배경으로 진행합니다.")
+                break
+            print(f"  [{t['i']}] Cloudflare 실패({str(e)[:60]}) -> 임시 배경 사용"); time.sleep(3)
     json.dump(tracks, open(tp, "w", encoding="utf-8"), ensure_ascii=False, indent=1); print(f"완료: 새 이미지 {made}장 / 곡 {len(tracks)}개")
 if __name__ == "__main__":
     main()
