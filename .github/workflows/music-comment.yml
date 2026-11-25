@@ -1,0 +1,46 @@
+name: music-comment
+
+# 이미 올린(공개된) 영상에 첫 댓글(한글+영문)을 채널 이름으로 단다. 고정(핀)은 API가 지원하지 않아 Studio에서 직접 눌러야 함.
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: "영상 ID (예: pjU2p2rNsSs, youtu.be/ 뒤의 글자)"
+        required: true
+      theme:
+        description: "댓글 문구 테마 (none=기본)"
+        type: choice
+        options: [none, winter, rainy, happy, anticipation, flutter, hard, tired, blue, fire]
+        default: none
+      text:
+        description: "직접 쓸 댓글 (비우면 테마 문구)"
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 댓글 달기
+        working-directory: music
+        env:
+          VID: ${{ github.event.inputs.video_id }}
+          THEME: ${{ github.event.inputs.theme }}
+          TEXT: ${{ github.event.inputs.text }}
+        run: |
+          [ "$THEME" = "none" ] && THEME=""
+          [ -n "$TEXT" ] && printf '%s' "$TEXT" > /tmp/c.txt
+          python comment.py --video-id "$VID" --theme "$THEME" $([ -n "$TEXT" ] && echo --text-file /tmp/c.txt)

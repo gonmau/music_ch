@@ -12,7 +12,7 @@ def youtube():
     c = Credentials(None, refresh_token=os.environ["YT_REFRESH_TOKEN"], token_uri="https://oauth2.googleapis.com/token", client_id=os.environ["YT_CLIENT_ID"], client_secret=os.environ["YT_CLIENT_SECRET"])
     return build("youtube", "v3", credentials=c)
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--video", required=True); ap.add_argument("--thumb", default=""); ap.add_argument("--title", default=""); ap.add_argument("--meta", default=""); ap.add_argument("--desc", required=True); ap.add_argument("--publish-at", default=""); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--video", required=True); ap.add_argument("--comment", default=""); ap.add_argument("--thumb", default=""); ap.add_argument("--title", default=""); ap.add_argument("--meta", default=""); ap.add_argument("--desc", required=True); ap.add_argument("--publish-at", default=""); a = ap.parse_args()
     import json
     meta = json.load(open(a.meta, encoding="utf-8")) if a.meta and os.path.exists(a.meta) else {}
     title = (a.title or meta.get("title") or "B-Side Night"); tags = meta.get("tags") or TAGS
@@ -43,6 +43,12 @@ def main():
                 yt.thumbnails().set(videoId=vid, media_body=MediaFileUpload(a.thumb, mimetype="image/jpeg")).execute(); print(f"  썸네일 설정 {t + 1}/3")
             except Exception as e:
                 print(f"  썸네일 실패: {str(e)[:200]}"); break
+    if a.comment and os.path.exists(a.comment):      # 첫 댓글(한/영). 비공개·예약 상태에선 실패할 수 있어 실패해도 업로드는 그대로 둔다
+        try:
+            import comment as CM
+            cid = CM.post(yt, vid, open(a.comment, encoding="utf-8").read().strip()); print(f"  첫 댓글 등록({cid}). 고정은 Studio 에서 직접 눌러 주세요.")
+        except Exception as e:
+            print(f"  첫 댓글 실패(공개 후 music-comment 로 다시): {str(e)[:160]}")
     open("uploaded.txt", "w").write(vid)
 if __name__ == "__main__":
     main()

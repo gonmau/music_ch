@@ -106,6 +106,8 @@ def main():
     desc_en = intro_en + "\n\n" + tl + "\n\n" + credit + "\n\n#80s #90s #PianoBallad #BSideNight\n"
     desc = intro + "\n\n" + intro_en + "\n\n" + "\n".join(f"{ts(t['start'])} {t['title']}" + (f" ({t['title_en']})" if t['title_en'] else "") + (f"\n   “{t['cap']}”\n   “{t['cap_en']}”" if t.get('cap') else "") for t in tracks) + "\n\nPiano samples: Salamander Grand Piano by Alexander Holm (CC BY 3.0)\n합성 음악(AI·코드 생성)입니다.\n\n" + hashtags + "\n"
     open(a.out + "_description.txt", "w", encoding="utf-8").write(desc)
+    import comment as CM
+    open(a.out + "_comment.txt", "w", encoding="utf-8").write(CM.text_for(a.theme or ""))     # 첫 댓글(한/영) 초안
     title = f"{line1} {line2} ({head_en}) | Vol.{a.vol} | B-Side Night"; title_en = f"{head_en} | Vol.{a.vol} | B-Side Night"
     json.dump(dict(theme=a.theme or "", title=title, title_en=title_en, desc_en=desc_en, line1_en=head_en, line1=line1, line2=line2, tags=tags, vol=a.vol, minutes=mins), open(a.out + "_meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print("제목:", title)

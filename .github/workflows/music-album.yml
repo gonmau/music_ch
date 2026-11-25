@@ -121,7 +121,7 @@ jobs:
         working-directory: music
         run: |
           N="out/vol$(printf %02d $VOL)"
-          python upload.py --video "$N.mp4" --thumb "${N}_thumb.jpg" --meta "${N}_meta.json" --desc "${N}_description.txt" --publish-at "${{ github.event.inputs.publish_at }}"
+          python upload.py --video "$N.mp4" --thumb "${N}_thumb.jpg" --meta "${N}_meta.json" --desc "${N}_description.txt" --comment "${N}_comment.txt" --publish-at "${{ github.event.inputs.publish_at }}"
       - name: 쇼츠 만들기 (앨범에서 세로 클립)
         if: ${{ github.event.inputs.shorts != '0' && github.event.inputs.shorts != '' }}
         working-directory: music
@@ -149,6 +149,7 @@ jobs:
             music/out/vol*_description.txt
             music/out/vol*_tracks.json
             music/out/vol*_meta.json
+            music/out/vol*_comment.txt
             music/out/vol*_short*.mp4
             music/out/vol*_short*.txt
           retention-days: 7
